@@ -13,11 +13,13 @@
 
 import datetime, calendar
 import os
+import logging
 
 from django.core.mail import send_mail
 
 from xfc_control.models import User, ScheduledDeletion, CachedFile
 from xfc_user_lock import lock_user, user_locked, unlock_user
+from xfc_scan import setup_logging, get_log_time_string
 
 def send_notification_email(user, file_list, date):
     """Send an email to the user to notify which files will be deleted and when
@@ -56,30 +58,36 @@ def schedule_deletions(user):
         return
 
     # determine how many bytes we have to recover
-    over_bytes = user.quota_used - user.quota_size
+    over_quota = user.quota_used - user.quota_size
+    over_limit = user.total_used - user.hard_limit_size
 
     # get a list of user cached files sorted descending
     cached_files = CachedFile.objects.filter(user=user).order_by('first_seen')
     # sum of files to delete
-    sum_delete = 0
+    quota_delete = 0
+    hard_delete  = 0
     # list of files to delete
     files_to_delete = []
 
     # get enough files to bring the quota back to its allocated amount
+    # need to use the quota formula described in xfc_scan.calc_user_quota
+    # get the current date
     for cf in cached_files:
-        if sum_delete > over_bytes:
+        if quota_delete > over_quota and hard_delete > over_limit:
             break
         # keep a running total
-        sum_delete += cf.size
+        quota_delete += cf.quota_use()
+        hard_delete += cf.size
         # add the files
         files_to_delete.append(cf.path)
 
     # create the ScheduledDeletion
     sd = ScheduledDeletion()
     sd.user = user
-    sd.time_entered = datetime.datetime.utcnow()
+    current_date = datetime.datetime.utcnow()
+    sd.time_entered = current_date
     # users have 24 hours to save their files!
-    sd.time_delete =  datetime.datetime.utcnow() + datetime.timedelta(hours=ScheduledDeletion.schedule_hours)
+    sd.time_delete =  current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours)
     sd.save()
     # deletion files
     sd.delete_files = CachedFile.objects.filter(user=user, path__in=files_to_delete)
@@ -89,20 +97,30 @@ def schedule_deletions(user):
     if user.notify:
         send_notification_email(user, files_to_delete, sd.time_delete)
 
+    # send to the logger
+    current_time_string = get_log_time_string()
+    schedule_time_string =  "%02i %s %d %02d:%02d" % \
+        (sd.time_delete.day, calendar.month_abbr[sd.time_delete.month], sd.time_delete.year,
+         sd.time_delete.hour, sd.time_delete.minute)
+
+    logging.info("[" + current_time_string + "] Scheduling files for deletion on: " + schedule_time_string)
+    for f in files_to_delete:
+        logging.info("    " + os.path.join(user.cache_disk.mountpoint, f))
+
 
 def run():
     """Entry point for the Django script run via ``./manage.py runscript``
     """
+    setup_logging(__name__)
     # loop over all the users
     for user in User.objects.all():
         # check if user locked
         if user_locked(user):
-            print user.name + " already locked"
             continue
         # lock the user
         lock_user(user)
         # schedule the deletions if the quota used is greater than the quota allocated
-        if user.quota_used > user.quota_size:
+        if user.quota_used > user.quota_size or user.total_used > user.hard_limit_size:
             schedule_deletions(user)
         # unlock the user
         unlock_user(user)

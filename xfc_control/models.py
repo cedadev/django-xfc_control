@@ -5,7 +5,9 @@ from django.db import models
 
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
-import os, calendar
+import os
+import calendar
+
 
 class CacheDisk(models.Model):
     """Allocated area(s) of disk(s) to hold cached files.  Users will be allocated space
@@ -46,7 +48,7 @@ class CacheDisk(models.Model):
         """
         free_cd = None
         for cd in CacheDisk.objects.all():
-            if (cd.size_bytes - cd.allocated_bytes) > requested_bytes:
+            if (cd.size_bytes - cd.used_bytes) > requested_bytes:
                 free_cd = cd
                 break
         # if the free_cd root path does not exist then create it
@@ -83,8 +85,12 @@ class User(models.Model):
     name = models.CharField(max_length=254, help_text="Name of user - should be same as JASMIN user name")
     email = models.EmailField(max_length=254, help_text="Email of user")
     notify = models.BooleanField(default=False, help_text="Switch notifications on / off")
-    quota_size = FileSizeField(default=0, help_text="Size of quota allocated to user")
-    quota_used = FileSizeField(default=0, help_text="Size of quota allocated to user")
+    quota_size = FileSizeField(default=0, help_text="Size of quota allocated to user, in (bytes day)")
+    quota_used = FileSizeField(default=0, help_text="Size of quota allocated to user, in (bytes day)")
+    hard_limit_size = FileSizeField(default=0,
+                                    help_text="Upper limit allocated to user, in bytes. This limit cannot be exceeded.")
+    total_used = FileSizeField(default=0, help_text="Total size of all files owned by the user.")
+
     cache_path = models.CharField(max_length=2024, help_text="Relative path to cache area")
     cache_disk = models.ForeignKey(CacheDisk, help_text="Cache disk allocated to the user")
 
@@ -99,9 +105,24 @@ class User(models.Model):
         return filesizeformat(self.quota_size)
     formatted_size.short_description = "allocated"
 
+    def formatted_hard_limit(self):
+        return filesizeformat(self.hard_limit_size)
+    formatted_hard_limit.short_description = "hard_limit"
+
+    def formatted_total_used(self):
+        return filesizeformat(self.total_used)
+    formatted_total_used.short_description = "total_used"
+
     @staticmethod
     def get_quota_size():
         """Get the initial size of the quota for the user.  This could be algorithmically
+           determined, but at the moment is just fixed at 2GB."""
+        qs = 2 * 1024 * 1024 * 1024
+        return qs
+
+    @staticmethod
+    def get_hard_limit_size():
+        """Get the initial size of the hard limit for the user.  This could be algorithmically
            determined, but at the moment is just fixed at 2GB."""
         qs = 2 * 1024 * 1024 * 1024
         return qs
@@ -127,7 +148,8 @@ class CachedFile(models.Model):
 
     path = models.CharField(max_length=2024, help_text="Relative path to the file")
     size = FileSizeField(default=0, help_text="Size of the file")
-    first_seen = models.DateTimeField(blank=True, null=True, help_text="Date the file was first scanned by the cache_manager")
+    first_seen = models.DateTimeField(blank=True, null=True,
+                                      help_text="Date the file was first scanned by the cache_manager")
     user = models.ForeignKey(User, help_text="User that owns the file", null=True)
 
     def formatted_size(self):
@@ -139,8 +161,15 @@ class CachedFile(models.Model):
     def __unicode__(self):
         d = self.first_seen
         return "%s (%s) (%02d %s %04d %02d:%02d)" % (
-        os.path.join(self.user.cache_disk.mountpoint, self.path), filesizeformat(self.size),
-                     d.day, calendar.month_abbr[d.month], d.year, d.hour, d.minute)
+          os.path.join(self.user.cache_disk.mountpoint, self.path), filesizeformat(self.size),
+                       d.day, calendar.month_abbr[d.month], d.year, d.hour, d.minute)
+
+    def quota_use(self):
+        """Get the amount of quota the file will use up"""
+        current_date = datetime.datetime.utcnow()
+        days_persistent = (current_date - self.first_seen).days + 1
+        use = self.size * days_persistent
+        return use
 
 
 class ScheduledDeletion(models.Model):
@@ -155,10 +184,12 @@ class ScheduledDeletion(models.Model):
 
     schedule_hours = 24  # number of hours before file is deleted
 
-    time_entered = models.DateTimeField(blank=True, null=True, help_text="Date the deletion was entered into the scheduler")
+    time_entered = models.DateTimeField(blank=True, null=True,
+                                        help_text="Date the deletion was entered into the scheduler")
     time_delete  = models.DateTimeField(blank=True, null=True, help_text="Time the deletion will take place")
     user = models.ForeignKey(User, help_text="User that the ScheduledDeletion belongs to")
-    delete_files = models.ManyToManyField(CachedFile, default=None, help_text="The list of files to be deleted in this schedule")
+    delete_files = models.ManyToManyField(CachedFile, default=None,
+                                          help_text="The list of files to be deleted in this schedule")
 
     def __unicode__(self):
-        return "%s" % (self.user.name)
+        return "%s" % self.user.name

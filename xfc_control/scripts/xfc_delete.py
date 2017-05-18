@@ -12,12 +12,15 @@
 """
 import datetime, calendar
 import os
+import logging
 
 from django.core.mail import send_mail
 
 from xfc_control.models import User, CachedFile, ScheduledDeletion
 from xfc_user_lock import lock_user, user_locked, unlock_user
-from xfc_scan import update_cache_disk_used_quota, calc_user_quota
+from xfc_scan import update_cache_disk_used_space, calc_user_quota, calc_user_used_space
+from xfc_scan import setup_logging, get_log_time_string
+
 
 def send_notification_email(user, file_list, date):
     """Send an email to the user to notify which files will be deleted and when
@@ -62,6 +65,7 @@ def do_deletions(user):
         for file in sd.delete_files.all():
             # get the filepath
             filepath = os.path.join(user.cache_disk.mountpoint, file.path)
+            log_time = get_log_time_string()
             try:
                 # get the time from the file
                 file_date = datetime.datetime.fromtimestamp(os.stat(filepath).st_mtime)
@@ -69,7 +73,7 @@ def do_deletions(user):
                 if file_date < sd.time_entered:
                     files_to_delete.append(file)
             except:
-                print "Could not get information about file: ", filepath
+                logging.error("[" + log_time + "] Could not get information about file: " + filepath)
 
     # There are five things to do when deleting the file:
     # 1. Update the user's quota, subtracting the amount used
@@ -78,23 +82,26 @@ def do_deletions(user):
     # 4. Unlink the CachedFile on the disk
     # 5. Remove the scheduled deletions
 
-    # get the sum of the size of the files
+    # get the number of bytes used on the cache disk by the user
+    old_user_used_space = user.total_used
+    # Delete the files and remove from the database
     for file in files_to_delete:
         try:
             # get the filepath
             filepath = os.path.join(user.cache_disk.mountpoint, file.path)
             os.unlink(filepath)
         except:
-            print "Could not delete the file: ", filepath
+            logging.error("[" + log_time + "] Could not delete the file: " + filepath)
         else:
             # remove the file from the database
+            logging.info("[" + log_time + "] Deleted file: " + filepath)
             file.delete()
 
     # Update the user quota
-    current_user_quota = user.quota_used
     calc_user_quota(user)
     # Update the disk quota
-    update_cache_disk_used_quota(user, user.quota_used-current_user_quota)
+    calc_user_used_space(user)
+    update_cache_disk_used_space(user, user.total_used-old_user_used_space)
 
     # remove the scheduled deletions
     for sd in scheduled_deletions:
@@ -105,15 +112,16 @@ def do_deletions(user):
         send_notification_email(user, files_to_delete, datetime.datetime.utcnow())
 
 def run():
+    setup_logging(__name__)
+
     for user in User.objects.all():
         # check if user locked
         if user_locked(user):
-            print user.name + " already locked"
             continue
         # lock the user
         lock_user(user)
         # schedule the deletions if the quota used is greater than the quota allocated
-        if user.quota_used > user.quota_size:
+        if user.quota_used > user.quota_size or user.total_used > user.hard_limit_size:
             do_deletions(user)
         # unlock the user
         unlock_user(user)

@@ -7,6 +7,7 @@ from django.http import HttpResponse, Http404
 from django.views.generic import View
 import json
 import os
+import datetime
 
 
 class UserView(View):
@@ -26,10 +27,12 @@ class UserView(View):
 
                ..
 
-               :>jsonarr int quota_used: amount of quota used by user so far (in bytes)
-               :>jsonarr string cache_path: path to the user's cache area
                :>jsonarr string name: username - should be same as JASMIN username
+               :>jsonarr string cache_path: path to the user's cache area
                :>jsonarr int quota_size: quota size allocated to user (in bytes)
+               :>jsonarr int quota_used: amount of quota used by user so far (in bytes)
+               :>jsonarr int hard_limit_size: maximum size of all the files owned by the user
+               :>jsonarr int total_used: total size of all files owned by the user
                :>jsonarr string email: email address of the user
 
                :statuscode 200: request completed successfully.
@@ -79,6 +82,8 @@ class UserView(View):
                     "notify" : user.notify,
                     "quota_size" : user.quota_size,
                     "quota_used" : user.quota_used,
+                    "hard_limit_size" : user.hard_limit_size,
+                    "total_used" : user.total_used,
                     "cache_path" : cache_path}
 
         return HttpResponse(json.dumps(data), content_type="application/json")
@@ -568,7 +573,7 @@ class ScheduledDeletionView(View):
         scheduled_deletions = ScheduledDeletion.objects.filter(user=user)
         if len(scheduled_deletions) == 0:  # no scheduled deletions for this user
             # return JSON with null strings for the times and an empty list for the files
-            data = [{"name": username, "time_entered": "", "time_delete": "", "files": []}]
+            data = [{"name": username, "time_entered": "", "time_delete": "", "cache_disk":"", "files": []}]
         else:
             data = []
             # there should only be one scheduled deletion, but there may be more in the future
@@ -581,3 +586,100 @@ class ScheduledDeletionView(View):
                              "cache_disk": sd.user.cache_disk.mountpoint,
                              "files": [os.path.join(f.path) for f in sd.delete_files.all()]})
         return HttpResponse(json.dumps(data), content_type = "application/json")
+
+
+def predict(request):
+    """:rest-api
+
+        .. http:get:: /xfc_control/api/v1/scheduled_deletions
+
+            Predict when the next deletions will occur and which files will be in the deletions, for a user
+
+            :queryparam string name: (*optional*) The username (same as JASMIN username).
+
+            ..
+
+           :>jsonarr Dictionary scheduled_deletions: Details of the scheduled deletions returned, the dictionary contains:
+
+            ..
+
+                - **name** (`string`): the name of the user who owns this scheduled deletion
+                - **time_predict** (`string`): the date when deletions will start, in isoformat
+                - **over_quota** (`int`): the amount that the user will exceed the quota by
+                - **cache_disk** (`string`): mountpoint of the cache disk where the files are kept
+                - **files** (`List[string]`): list of files which will be deleted
+
+            :statuscode 200: request completed successfully
+
+            :statuscode 404: name not fourd - i.e. user does not exist
+
+            **Example request**
+
+            .. sourcecode:: http
+
+                GET /xfc_control/api/v1/scheduled_deletions?name=fred HTTP/1.1
+                Host: xfc.ceda.ac.uk
+                Accept: application/json
+
+            **Example response**
+
+            .. sourcecode:: http
+
+                HTTP/1.1 200 OK
+                Vary: Accept
+                Content-Type: application/json
+
+                [
+                  {
+                    "files": [
+                               "/cache/disk1/user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1941.1950.tmp.dat.nc"
+                             ],
+                    "time_entered": "2017-05-17T09:55:02.789476",
+                    "time_delete": "2017-05-18T09:55:02.789479",
+                    "name": "fred"
+                  }
+                ]
+
+    """
+    # First get the user details
+    if len(request.GET) == 0:
+        raise Http404("No name parameter supplied")
+    else:
+        # get the username
+        username = request.GET.get("name", "")
+        if username:
+            user = get_object_or_404(User, name=username)
+        else:
+            raise Http404("Error with name parameter")
+
+    # now calculate the number of days until the quota will run out
+    n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
+    # create the date
+    current_date = datetime.datetime.utcnow()
+    deletion_date = current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours * n_days)
+    # calculate how much over
+    over_quota = n_days * user.total_used + user.quota_used - user.quota_size
+
+    # get a list of (predicted) files that will be deleted
+    # get a list of user cached files sorted descending
+    cached_files = CachedFile.objects.filter(user=user).order_by('first_seen')
+    # sum of files to delete
+    quota_delete = 0
+    # list of files to delete
+    files_to_delete = []
+
+    # get enough files to bring the quota back to its allocated amount
+    for cf in cached_files:
+        if quota_delete > over_quota:
+            break
+        # keep a running total
+        quota_delete += cf.quota_use()
+        # add the files
+        files_to_delete.append(cf.path)
+
+    data = {"name": username,
+            "time_predict": deletion_date.isoformat(),
+            "cache_disk": user.cache_disk.mountpoint,
+            "over_quota": over_quota,
+            "files": files_to_delete}
+    return HttpResponse(json.dumps(data), content_type="application/json")
