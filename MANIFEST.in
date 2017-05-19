@@ -1,0 +1,4 @@
+include LICENSE
+include README.rst
+recursive-include xfc_control/static *
+recursive-include xfc_control/templates *

@@ -6,12 +6,15 @@ from django.db import models
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
 import os
+import datetime
 import calendar
+import settings
 
 
 class CacheDisk(models.Model):
     """Allocated area(s) of disk(s) to hold cached files.  Users will be allocated space
     on a disk, depending on their quota and which disk has free space.
+
     :var models.CharField mountpoint: the path to the cache area
     :var FileSizeField size_bytes: amount of space on the disk allocated to users
     :var FileSizeField allocated_bytes: number of bytes allocated to users via their quotas
@@ -43,7 +46,8 @@ class CacheDisk(models.Model):
     @staticmethod
     def find_free_cache_disk(requested_bytes):
         """Find a CacheDisk with enough free (unallocated) space to store the user's quota.
-           If the mountpoint of the CacheDisk does not exist then it will be created.
+        If the mountpoint of the CacheDisk does not exist then it will be created.
+
         :var int requested_bytes: amount of space requested for the user's allocated quota
         """
         free_cd = None
@@ -117,14 +121,14 @@ class User(models.Model):
     def get_quota_size():
         """Get the initial size of the quota for the user.  This could be algorithmically
            determined, but at the moment is just fixed at 2GB."""
-        qs = 2 * 1024 * 1024 * 1024
+        qs = settings.DEFAULT_QUOTA_SIZE
         return qs
 
     @staticmethod
     def get_hard_limit_size():
         """Get the initial size of the hard limit for the user.  This could be algorithmically
            determined, but at the moment is just fixed at 2GB."""
-        qs = 2 * 1024 * 1024 * 1024
+        qs = settings.DEFAULT_HARD_LIMIT
         return qs
 
 
@@ -139,7 +143,8 @@ class UserLock(models.Model):
 
 
 class CachedFile(models.Model):
-    """Description of a cached file.  These files are added by the cache_manager.py Daemon
+    """Description of a cached file.  These files are added by the xfc_scan.py Daemon.
+
     :var models.CharField path: path to the file AFTER the User mountpoint
     :var FileSizeField size: size of the file
     :var models.DateTimeField first_seen: time the file was first scanned by the cache_manager Daemon
@@ -177,9 +182,10 @@ class ScheduledDeletion(models.Model):
     The date the deletion was entered into the schedule is kept so that the user can touch the files, whereupon
     they will be newer than this date.  This indicates to xfc_delete not to delete the file, as the user wishes
     to keep them.  However, xfc_schedule will then just schedule another file to be deleted.
-     :var models.DateTimeField time_entered: time the ScheduledDeletion was entered into the db
-     :var models.DateTimeField time_delete:  time the ScheduledDeletion will take place
-     :var models.ForeignKey user: user that the ScheduledDeletion will target
+
+    :var models.DateTimeField time_entered: time the ScheduledDeletion was entered into the db
+    :var models.DateTimeField time_delete:  time the ScheduledDeletion will take place
+    :var models.ForeignKey user: user that the ScheduledDeletion will target
     """
 
     schedule_hours = 24  # number of hours before file is deleted

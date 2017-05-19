@@ -12,7 +12,8 @@ import datetime
 import calendar
 import os
 import logging
-from XFC import settings
+import xfc_control.settings as settings
+
 
 def setup_logging(module_name):
     # setup the logging
@@ -105,10 +106,12 @@ def scan_for_deleted_files(user):
 
 def calc_user_quota(user):
     """Calculate how much of the user's quota has been used up.
-       The quota is in bytes day - so the algorithm is:
-        nfiles
-       sum(current_date - file(n).date_first_seen)*file(n).size
-        n=0
+       The quota is in bytes day - so the algorithm is::
+
+          nfiles
+          sum(current_date - file(n).date_first_seen)*file(n).size
+          n=0
+
        :var xfc_control.models.User user: instance of User to update
     """
 

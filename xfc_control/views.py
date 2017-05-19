@@ -92,80 +92,84 @@ class UserView(View):
     def post(self, request, *args, **kwargs):
         """:rest-api
 
-        .. http:post:: /xfc_control/api/v1/user
+           .. http:post:: /xfc_control/api/v1/user
 
-           Create a user identified by their username and (*optional*) email address
+                Create a user identified by their username and (*optional*) email address
 
-            ..
+                ..
 
-            :<jsonarr string name: the username (same as JASMIN username)
-            :<jsonarr string email: (*optional*) email address of the user for deletion notifications
+                :<jsonarr string name: the username (same as JASMIN username)
+                :<jsonarr string email: (*optional*) email address of the user for deletion notifications
 
-            :>jsonarr string name: the username
-            :>jsonarr string email: the user's email address
-            :>jsonarr string cache_path: path to the user's cache area
-            :>jsonarr int quota_size: quota size allocated to user (in bytes)
+                :>jsonarr string name: the username
+                :>jsonarr string email: the user's email address
+                :>jsonarr string cache_path: path to the user's cache area
+                :>jsonarr int quota_size: quota size allocated to user (in bytes)
 
-            :statuscode 200: request completed successfully
-            :statuscode 403: error with user quota: no CacheDisk could be found with enough space on it to hold the user's quota
-            :statuscode 403: Transfer cache already initialized for this user
-            :statuscode 404: name not supplied in POST request
+                :statuscode 200: request completed successfully
+                :statuscode 403: error with user quota: no CacheDisk could be found with enough space on it to hold the user's quota
+                :statuscode 403: Transfer cache already initialized for this user
+                :statuscode 404: name not supplied in POST request
 
-            **Example request**
+                **Example request**
 
-            .. sourcecode:: http
+                .. sourcecode:: http
 
-                POST /xfc_control/api/v1/user HTTP/1.1
-                Host: xfc.ceda.ac.uk
-                Accept: application/json
-                Content-Type: application/json
+                    POST /xfc_control/api/v1/user HTTP/1.1
+                    Host: xfc.ceda.ac.uk
+                    Accept: application/json
+                    Content-Type: application/json
 
-                [
-                  {
-                    "name": "fred",
-                    "email": "fred@fredco.com",
-                  }
-                ]
+                    [
+                      {
+                        "name": "fred",
+                        "email": "fred@fredco.com",
+                      }
+                    ]
 
 
-            **Example response**
+                **Example response**
 
-            .. sourcecode:: http
+                .. sourcecode:: http
 
-                HTTP/1.1 200 OK
-                Vary: Accept
-                Content-Type: application/json
+                    HTTP/1.1 200 OK
+                    Vary: Accept
+                    Content-Type: application/json
 
-                [
-                  {
-                    "name": "fred",
-                    "email": "fred@fredco.com",
-                    "cache_path": "/cache/disk1/users/fred",
-                    "quota_size": 5368709120,
-                  }
-                ]
+                    [
+                      {
+                        "name": "fred",
+                        "email": "fred@fredco.com",
+                        "cache_path": "/cache/disk1/users/fred",
+                        "quota_size": 5368709120,
+                      }
+                    ]
 
-                HTTP/1.1 403 Forbidden
-                Vary: Accept
-                Content-Type: application/json
+                .. sourcecode:: http
 
-                [
-                  {
-                    "error": "No CacheDisk found with enough free space for user's quota"
-                  }
+                    HTTP/1.1 403 Forbidden
+                    Vary: Accept
+                    Content-Type: application/json
 
-                  {
-                    "error": "Transfer cache already initialized for this user"
-                  }
-                ]
+                    [
+                      {
+                        "error": "No CacheDisk found with enough free space for user's quota"
+                      }
 
-                HTTP/1.1 404 Not found
-                Vary: Accept
-                Content-Type: application/json
+                      {
+                        "error": "Transfer cache already initialized for this user"
+                      }
+                    ]
 
-                [
-                  "No username supplied to POST request"
-                ]
+                .. sourcecode:: http
+
+                    HTTP/1.1 404 Not found
+                    Vary: Accept
+                    Content-Type: application/json
+
+                    [
+                      "No username supplied to POST request"
+                    ]
         """
         # get the json formatted data
         data = request.read()
@@ -233,7 +237,6 @@ class UserView(View):
             :<jsonarr string email: (*optional*) email address of the user for deletion notifications
             :<jsonarr boolean notify: (*optional*) whether to email the user about scheduled deletions
 
-            ..
             :>jsonarr string name: the username
             :>jsonarr string email: the user's email address
             :>jsonarr bool notify: notifications on / off
@@ -255,7 +258,7 @@ class UserView(View):
                   {
                     "name": "fred",
                     "email": "fred@fredco.com",
-                    "notify": true | false,
+                    "notify": true,
                   }
                 ]
 
@@ -272,9 +275,11 @@ class UserView(View):
                   {
                     "name": "fred",
                     "email": "fred@fredco.com",
-                    "notify": true | false,
+                    "notify": true,
                   }
                 ]
+
+            .. sourcecode:: http
 
                 HTTP/1.1 404 Not found
                 Vary: Accept
@@ -283,6 +288,7 @@ class UserView(View):
                 [
                   "No username supplied to PUT request"
                 ]
+
                 [
                   "User not found as supplied in PUT request"
                 ]
@@ -327,54 +333,54 @@ class CachedFileView(View):
     def get(self, request, *args, **kwargs):
         """:rest-api
 
-             .. http:get:: /xfc_control/api/v1/file
+         .. http:get:: /xfc_control/api/v1/file
 
-                 Get the details of a user identified by their username
+             Get the details of a user identified by their username
 
-                 :queryparam string name: The username (same as JASMIN username).
+             :queryparam string name: The username (same as JASMIN username).
 
-                 :queryparam string match: (*optional*) Substring to match against in the name of the CachedFile.
+             :queryparam string match: (*optional*) Substring to match against in the name of the CachedFile.
 
-                 :queryparam bool full_path: (*optional*) whether to output full paths of the files or paths relative to the mountpoint of the CacheDisk.
+             :queryparam bool full_path: (*optional*) whether to output full paths of the files or paths relative to the mountpoint of the CacheDisk.
 
-                 ..
+             ..
 
-                 :>jsonarr List[Dictionary] files: Details of the files returned, each dictionary contains:
+             :>jsonarr List[Dictionary] files: Details of the files returned, each dictionary contains:
 
-                 ..
+             ..
 
-                     - **path** (`string`): path to the file
-                     - **size** (`integer`): size of the file (in bytes)
-                     - **first_seen** (`string`): date the file was first seen in the system, in isoformat
+                 - **path** (`string`): path to the file
+                 - **size** (`integer`): size of the file (in bytes)
+                 - **first_seen** (`string`): date the file was first seen in the system, in isoformat
 
-                 :statuscode 200: request completed successfully.
+             :statuscode 200: request completed successfully.
 
-                 **Example request**
+             **Example request**
 
-                 .. sourcecode:: http
+             .. sourcecode:: http
 
-                     GET /xfc_control/api/v1/file?user=fred?match=.nc?full_path HTTP/1.1
-                     Host: xfc.ceda.ac.uk
-                     Accept: application/json
+                 GET /xfc_control/api/v1/file?user=fred?match=.nc?full_path HTTP/1.1
+                 Host: xfc.ceda.ac.uk
+                 Accept: application/json
 
-                 **Example response**
+             **Example response**
 
-                 .. sourcecode:: http
+             .. sourcecode:: http
 
-                     HTTP/1.1 200 OK
-                     Vary: Accept
-                     Content-Type: application/json
+                 HTTP/1.1 200 OK
+                 Vary: Accept
+                 Content-Type: application/json
 
-                     [
-                       {
-                         "path": 0,
-                         "size": "/cache/disk1/users/fred",
-                       },
-                       {
-                         "path": 0,
-                         "size": "/cache/disk1/users/fred",
-                       }
-                     ]
+                 [
+                   {
+                     "path": 0,
+                     "size": "/cache/disk1/users/fred",
+                   },
+                   {
+                     "path": 0,
+                     "size": "/cache/disk1/users/fred",
+                   }
+                 ]
 
         """
         if len(request.GET) == 0:
@@ -591,7 +597,7 @@ class ScheduledDeletionView(View):
 def predict(request):
     """:rest-api
 
-        .. http:get:: /xfc_control/api/v1/scheduled_deletions
+       .. http:get:: /xfc_control/api/v1/scheduled_deletions
 
             Predict when the next deletions will occur and which files will be in the deletions, for a user
 
@@ -631,12 +637,17 @@ def predict(request):
 
                 [
                   {
+                    "cache_disk": "/cache/disk1",
                     "files": [
-                               "/cache/disk1/user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1941.1950.tmp.dat.nc"
+                               "user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1901.1910.tmp.dat.nc",
+                               "user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.2001.2010.tmp.dat.nc",
+                               "user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1951.1960.tmp.dat.nc",
+                               "user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1971.1980.tmp.dat.nc",
+                               "user_cache/dhk63261/cru/data/cru_ts/cru_ts_3.24.01/data/tmp/cru_ts3.24.01.1961.1970.tmp.dat.nc"
                              ],
-                    "time_entered": "2017-05-17T09:55:02.789476",
-                    "time_delete": "2017-05-18T09:55:02.789479",
-                    "name": "fred"
+                    "over_quota": 1207043264,
+                    "name": "dhk63261",
+                    "time_predict": "2017-05-23T15:43:47.437739"
                   }
                 ]
 
