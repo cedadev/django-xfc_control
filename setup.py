@@ -11,6 +11,13 @@ setup(
     name='xfc_control',
     version='0.1',
     packages=['xfc_control'],
+    install_requires=[
+        'django',
+        'django-sizefield',
+        'django-extensions',
+        'django-multiselectfield',
+        'psycopg2'
+    ],
     include_package_data=True,
     license='my License',  # example license
     description='A Django app to control temporary file caching on groupworkspaces on JASMIN.',
