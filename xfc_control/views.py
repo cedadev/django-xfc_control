@@ -664,7 +664,10 @@ def predict(request):
             raise Http404("Error with name parameter")
 
     # now calculate the number of days until the quota will run out
-    n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
+    if user.total_used > 0:
+        n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
+    else:
+        n_days = 0
     # create the date
     current_date = datetime.datetime.utcnow()
     deletion_date = current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours * n_days)
@@ -694,3 +697,4 @@ def predict(request):
             "over_quota": over_quota,
             "files": files_to_delete}
     return HttpResponse(json.dumps(data), content_type="application/json")
+
