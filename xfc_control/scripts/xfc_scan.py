@@ -59,25 +59,30 @@ def scan_for_added_files(user):
                 except os.error:
                     logging.error("[" + current_time_string + "] Could not find file with path: " + filepath)
                     continue
-                # create the CachedFile
                 try:
-                    cf = CachedFile()
-                    cf.user = user
-                    cf.cache_disk = user.cache_disk
                     # create the short filepath, that does not include the cache disk mountpoint
                     # ensure trailing slash
                     mp = user.cache_disk.mountpoint
                     if mp[-1] != "/":
                         mp += "/"
                     sh_filepath = filepath.replace(mp,"")
-                    cf.path = sh_filepath
-                    cf.size = filesize
-                    cf.first_seen = current_time
                     # check whether this file already exists
                     current_file = CachedFile.objects.filter(user=user, path=sh_filepath)
                     if len(current_file) == 0:
                         logging.info("[" + current_time_string + "] Adding file: " + filepath)
+                        # create the CachedFile
+                        cf = CachedFile()
+                        cf.user = user
+                        cf.cache_disk = user.cache_disk
+                        cf.path = sh_filepath
+                        cf.size = filesize
+                        cf.first_seen = datetime.datetime.utcnow()
                         cf.save()
+                    elif current_file[0].size != filesize:
+                        # check whether this file's size has changed
+                        logging.info("[" + current_time_string + "] File size changed: " + filepath)
+                        current_file[0].size = filesize
+                        current_file[0].save()
                 except:
                     logging.error("[" + current_time_string + "] Could not create CachedFile with path: " + filepath)
 
@@ -165,6 +170,7 @@ def run():
     for user in User.objects.all():
         # check if user locked
         if user_locked(user):
+            logging.info("[" + get_log_time_string() + "] User already locked: " + user.name)
             continue
         # lock the user
         lock_user(user)

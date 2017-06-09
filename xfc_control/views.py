@@ -197,6 +197,8 @@ class UserView(View):
 
         # get the (initial) quota size
         qs = User.get_quota_size()
+        # get the hard limit size
+        hl = User.get_hard_limit_size()
 
         # find a CacheDisk with enough free space (unallocated space)
         cache_disk = CacheDisk.find_free_cache_disk(qs)
@@ -211,7 +213,8 @@ class UserView(View):
         # create cache path
         user_path = cache_disk.create_user_cache_path(username)
         # create user object
-        user = User(name = username, email=email, quota_size=qs, quota_used=0, cache_path=user_path, cache_disk=cache_disk)
+        user = User(name = username, email=email, quota_size=qs, quota_used=0, hard_limit_size=hl, total_used=0,
+                    cache_path=user_path, cache_disk=cache_disk)
         user.save()
         # update the cache_disk allocated quotas
         cache_disk.allocated_bytes += qs
