@@ -8,16 +8,53 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-DEBUG = True
+DEBUG = False
+# Security settings
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = 'DENY'
+ALLOWED_HOSTS = ['192.168.51.25']
 
 
 # Read the secret key from a file
-SECRET_KEY_FILE = '/home/vagrant/conf/secret_key.txt'
+SECRET_KEY_FILE = '/home/vagrant/XFC/conf/secret_key.txt'
 with open(SECRET_KEY_FILE) as f:
     SECRET_KEY = f.read().strip()
 
 
 # Logging settings
+LOG_FORMAT = '[%(levelname)s] [%(asctime)s] [%(name)s:%(lineno)s] [%(threadName)s] %(message)s'
+LOGGING_CONFIG = None
+LOGGING = {
+    'version' : 1,
+    'disable_existing_loggers' : False,
+    'formatters' : {
+        'generic' : {
+            'format' : LOG_FORMAT,
+        },
+        'slack' : {
+            'format' : '`' + LOG_FORMAT + '`',
+        },
+    },
+    'handlers' : {
+        'stdout' : {
+            'class' : 'logging.StreamHandler',
+            'formatter' : 'generic',
+        },
+            },
+    'loggers' : {
+        '' : {
+                        'handlers' : ['stdout'],
+                        'level' : 'INFO',
+            'propogate' : True,
+        },
+    },
+}
+import logging.config
+logging.config.dictConfig(LOGGING)
 
 
 # Application definition
@@ -28,6 +65,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_extensions',
         'xfc_control',
     ]
 
@@ -35,7 +73,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+#    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -95,12 +133,12 @@ LANGUAGE_CODE = 'en-gb'
 TIME_ZONE = 'Europe/London'
 USE_I18N = True
 USE_L10N = True
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = '/Coding/django-xfc_control/static'
+STATIC_ROOT = '/var/www/static'
 
 
 # Email
@@ -109,4 +147,6 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL = 'xfc-control@xfc-control.ceda.ac.uk'
 
 
 # Put your custom settings here.
-ALLOWED_HOSTS=['0.0.0.0', '192.168.51.25']
+ALLOWED_HOSTS=["192.168.51.25", 
+               "192.168.51.25"]
+

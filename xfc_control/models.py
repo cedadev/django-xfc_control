@@ -5,7 +5,8 @@ from django.db import models
 
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
-import os
+import os, sys
+import subprocess
 import datetime
 import calendar
 import settings
@@ -65,12 +66,25 @@ class CacheDisk(models.Model):
         """Create the path to the user's cache.
         :var string username: name of the user to create.
         """
+        # concatenate the mountpoint and the user_cache area
+        cache_path = os.path.join(self.mountpoint, "user_cache")
         user_path = os.path.join("user_cache", username)
-        # concatenate the mountpoint and the relative userpath
+        # concatenate the user_cache and the relative userpath
         total_path = os.path.join(self.mountpoint, user_path)
+
+        # create the cache area for all users
+        if not os.path.exists(cache_path):
+            os.makedirs(cache_path, mode=0o755)
+
         # create the cache area for the user
         if not os.path.exists(total_path):
-            os.makedirs(total_path)
+            os.makedirs(total_path, mode=0o700)
+
+            # transfer ownership to the user
+            groupname = "users"
+            # have to use subprocess to do as sudo
+            subprocess.call(["/usr/bin/sudo", "/bin/chown", username+":"+groupname, total_path])
+
         # return just the user path - will facilitate moving entire user directories to a new cache disk
         return user_path
 
