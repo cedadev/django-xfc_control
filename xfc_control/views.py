@@ -194,7 +194,8 @@ class UserView(View):
         if "name" in data:
             username = data["name"]
         else:
-            return HttpError({"error": "No name supplied."})
+            error_data["error"] = "No name supplied."
+            return HttpError(error_data)
 
         if "email" in data:
             email = data["email"]
@@ -216,7 +217,7 @@ class UserView(View):
         cache_disk = CacheDisk.find_free_cache_disk(qs)
         # check that a CacheDisk was found, if not return an error
         if not cache_disk:
-            error_data["error"] = "No CacheDisk found with enough free spa3ce for user's quota."
+            error_data["error"] = "No CacheDisk found with enough free space for user's quota."
             return HttpError(error_data, status=403)
 
         # create cache path
@@ -311,6 +312,9 @@ class UserView(View):
         else:
             # get the username
             username = request.GET.get("name", "")
+            # update the user using the json
+            data = request.read()
+            data = json.loads(data)
             # copy the data into error_data
             error_data = data
             try:
@@ -322,9 +326,6 @@ class UserView(View):
             except:
                 error_data["error"] = "User not found."
                 return HttpError(error_data)
-            # update the user using the json
-            data = request.read()
-            data = json.loads(data)
 
             if "email" in data:
                 user.email = data["email"]
