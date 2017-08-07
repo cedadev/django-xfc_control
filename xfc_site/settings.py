@@ -8,13 +8,13 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-DEBUG = False
+DEBUG = True
 # Security settings
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = True
+#CSRF_COOKIE_SECURE = True
+#CSRF_COOKIE_HTTPONLY = True
 X_FRAME_OPTIONS = 'DENY'
 ALLOWED_HOSTS = ['192.168.51.25']
 
@@ -73,7 +73,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+#    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
