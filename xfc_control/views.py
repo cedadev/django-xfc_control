@@ -10,6 +10,11 @@ import os
 import datetime
 
 
+def HttpError(error_data, status=404):
+    """Function that returns a 404 (or other status) HTTP error."""
+    return HttpResponse(json.dumps(error_data),
+                        content_type="application/json", status=status, reason=error_data["error"])
+
 class UserView(View):
     """:rest-api
 
@@ -66,14 +71,22 @@ class UserView(View):
         """
         # first case - error as you can only retrieve single users
         if len(request.GET) == 0:
-            raise Http404("No name parameter supplied")
+            return HttpError({"error": "No name supplied"})
         else:
             # get the username
             username = request.GET.get("name", "")
-            if username:
-                user = get_object_or_404(User, name=username)
-            else:
-                raise Http404("Error with name parameter")
+            # get the user or 404
+            error_data = {}
+            try:
+                if username:
+                    user = User.objects.get(name=username)
+                else:
+                    error_data["error"] = "Error with name parameter."
+                    return HttpError(data)
+            except:
+                error_data["error"] = "User not found."
+                return HttpError(data)
+
             # create the path to the cache area
             cache_path = os.path.join(user.cache_disk.mountpoint, user.cache_path)
 
@@ -174,12 +187,14 @@ class UserView(View):
         # get the json formatted data
         data = request.read()
         data = json.loads(data)
+        # copy input data into error_data
+        error_data = data
 
         # get the user name and email out of the json
         if "name" in data:
             username = data["name"]
         else:
-            raise Http404("No name supplied to POST request")
+            return HttpError({"error": "No name supplied."})
 
         if "email" in data:
             email = data["email"]
@@ -189,11 +204,8 @@ class UserView(View):
         # check if user already exists
         user_query = User.objects.filter(name=username)
         if len(user_query) != 0:
-            error_msg = "Transfer cache already initialized for this user."
-            return HttpResponse(json.dumps({"error": error_msg}),
-                                content_type="application/json",
-                                status=403,
-                                reason=error_msg)
+            error_data["error"] = "Transfer cache already initialized for this user."
+            return HttpError(error_data, status=403)
 
         # get the (initial) quota size
         qs = User.get_quota_size()
@@ -204,11 +216,8 @@ class UserView(View):
         cache_disk = CacheDisk.find_free_cache_disk(qs)
         # check that a CacheDisk was found, if not return an error
         if not cache_disk:
-            error_msg = "No CacheDisk found with enough free space for user's quota"
-            return HttpResponse(json.dumps({"error": error_msg}),
-                                content_type="application/json",
-                                status=403,
-                                reason=error_msg)
+            error_data["error"] = "No CacheDisk found with enough free spa3ce for user's quota."
+            return HttpError(error_data, status=403)
 
         # create cache path
         user_path = cache_disk.create_user_cache_path(username)
@@ -298,15 +307,21 @@ class UserView(View):
         """
         # find the user first
         if len(request.GET) == 0:
-            raise Http404("No name parameter supplied")
+            return HttpError({"error": "No name supplied."})
         else:
             # get the username
             username = request.GET.get("name", "")
-            # get the user or 404
-            if username:
-                user = get_object_or_404(User, name=username)
-            else:
-                raise Http404("Error with name parameter")
+            # copy the data into error_data
+            error_data = data
+            try:
+                if username:
+                    user = User.objects.get(name=username)
+                else:
+                    error_data["error"] = "Error with name parameter."
+                    return HttpError(error_data)
+            except:
+                error_data["error"] = "User not found."
+                return HttpError(error_data)
             # update the user using the json
             data = request.read()
             data = json.loads(data)
@@ -387,14 +402,19 @@ class CachedFileView(View):
 
         """
         if len(request.GET) == 0:
-            raise Http404("No name parameter supplied")
+            return HttpError({"error" : "No name supplied."})
         else:
             # get the username
             username = request.GET.get("name", "")
-            if username:
-                user = get_object_or_404(User, name=username)
-            else:
-                raise Http404("Error with name parameter")
+            try:
+                if username:
+                    user = User.objects.get(name=username)
+                else:
+                    error_data["error"] = "Error with name parameter."
+                    return HttpError(error_data)
+            except:
+                error_data["error"] = "User not found."
+                return HttpError(error_data)
             # get the match if present
             match = request.GET.get("match", "")
             # get whether a full path is required
@@ -493,12 +513,20 @@ class CacheDiskView(View):
             mountpoint = request.GET.get("mountpoint", "")
             # second case - get disk by uid
             if id:
-                disk = get_object_or_404(CacheDisk, pk=id)
+                try:
+                    disk = CacheDisk.objects.get(pk=id)
+                except:
+                    error_data["error"] = "Could not find CacheDisk with id=" + str(id) + "."
+                    return HttpError(error_data)
             # third case - get disk by mountpoint
             elif mountpoint:
-                disk = get_object_or_404(CacheDisk, mountpoint=mountpoint)
+                try:
+                    disk = CacheDisk.objects.get(mountpoint=mountpoint)
+                except:
+                    error_data["error"] = "Could not find CacheDisk with mountpoint=" + mountpoint + "."
+                    return HttpError(error_data)
             else:
-                raise Http404("Error with supplied parameters")
+                return HttpError({"error": "Error with supplied parameters"})
             disks = [{"id": disk.pk,
                       "mountpoint": disk.mountpoint,
                       "size": disk.size_bytes,
@@ -538,7 +566,7 @@ class ScheduledDeletionView(View):
 
                :statuscode 200: request completed successfully
 
-               :statuscode 404: name not fourd - i.e. user does not exist
+               :statuscode 404: name not found - i.e. user does not exist
 
                **Example request**
 
@@ -570,14 +598,19 @@ class ScheduledDeletionView(View):
         """
         # First get the user details
         if len(request.GET) == 0:
-            raise Http404("No name parameter supplied")
+            return HttpError({"error" : "No name supplied."})
         else:
             # get the username
             username = request.GET.get("name", "")
-            if username:
-                user = get_object_or_404(User, name=username)
-            else:
-                raise Http404("Error with name parameter")
+            try:
+                if username:
+                    user = User.objects.get(name=username)
+                else:
+                    error_data["error"] = "Error with name parameter."
+                    return HttpError(error_data)
+            except:
+                error_data["error"] = "User not found."
+                return HttpError(error_data)
         # Now get the scheduled deletions
         scheduled_deletions = ScheduledDeletion.objects.filter(user=user)
         if len(scheduled_deletions) == 0:  # no scheduled deletions for this user
@@ -657,14 +690,19 @@ def predict(request):
     """
     # First get the user details
     if len(request.GET) == 0:
-        raise Http404("No name parameter supplied")
+        return HttpError({"error": "No name supplied."})
     else:
         # get the username
         username = request.GET.get("name", "")
-        if username:
-            user = get_object_or_404(User, name=username)
-        else:
-            raise Http404("Error with name parameter")
+        try:
+            if username:
+                user = User.objects.get(name=username)
+            else:
+                error_data["error"] = "Error with name parameter."
+                return HttpError(error_data)
+        except:
+            error_data["error"] = "User not found."
+            return HttpError(error_data)
 
     # now calculate the number of days until the quota will run out
     if user.total_used > 0:
