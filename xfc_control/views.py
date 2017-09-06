@@ -705,11 +705,15 @@ def predict(request):
             error_data["error"] = "User not found."
             return HttpError(error_data)
 
+
     # now calculate the number of days until the quota will run out
-    if user.total_used > 0:
-        n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
-    else:
-        n_days = 0
+    # first check that the user has files
+    if user.total_used == 0:
+        data = {"name": username,
+                "files": []}
+        return HttpResponse(json.dumps(data), content_type="application/json")
+        
+    n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
     # create the date
     current_date = datetime.datetime.utcnow()
     deletion_date = current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours * n_days)
