@@ -59,8 +59,10 @@ class CacheDisk(models.Model):
         # if the free_cd root path does not exist then create it
         if free_cd:
             if not os.path.exists(cd.mountpoint):
-                os.makedirs(cd.mountpoint)
+                # have to use subprocess to do as sudo
+                subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", cd.mountpoint])
         return free_cd
+
 
     def create_user_cache_path(self, username):
         """Create the path to the user's cache.
@@ -74,11 +76,13 @@ class CacheDisk(models.Model):
 
         # create the cache area for all users
         if not os.path.exists(cache_path):
-            os.makedirs(cache_path, mode=0o755)
+            # have to use subprocess to do as sudo
+            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", cache_path, "-m 755"])
 
         # create the cache area for the user
         if not os.path.exists(total_path):
-            os.makedirs(total_path, mode=0o700)
+            # have to use subprocess to do as sudo
+            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", total_path, "-m 700"])
 
             # transfer ownership to the user
             groupname = "users"
