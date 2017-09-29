@@ -46,16 +46,18 @@ class CacheDisk(models.Model):
 
     @staticmethod
     def find_free_cache_disk(requested_bytes):
-        """Find a CacheDisk with enough free (unallocated) space to store the user's quota.
+        """Find a CacheDisk with the most free (unallocated) space to store the user's quota.
         If the mountpoint of the CacheDisk does not exist then it will be created.
 
         :var int requested_bytes: amount of space requested for the user's allocated quota
         """
         free_cd = None
+        free_bytes = 0
         for cd in CacheDisk.objects.all():
-            if (cd.size_bytes - cd.used_bytes) > requested_bytes:
+            if (cd.size_bytes - cd.used_bytes) > free_bytes:
                 free_cd = cd
-                break
+                free_bytes = cd.size_bytes - cd.used_bytes
+
         # if the free_cd root path does not exist then create it
         if free_cd:
             if not os.path.exists(cd.mountpoint):
@@ -76,13 +78,14 @@ class CacheDisk(models.Model):
 
         # create the cache area for all users
         if not os.path.exists(cache_path):
+            print "!"
             # have to use subprocess to do as sudo
-            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", cache_path, "-m 755"])
+            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", cache_path, "-m", "755"])
 
         # create the cache area for the user
         if not os.path.exists(total_path):
             # have to use subprocess to do as sudo
-            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", total_path, "-m 700"])
+            subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", total_path, "-m", "700"])
 
             # transfer ownership to the user
             groupname = "users"

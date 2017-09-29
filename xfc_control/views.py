@@ -214,7 +214,7 @@ class UserView(View):
         hl = User.get_hard_limit_size()
 
         # find a CacheDisk with enough free space (unallocated space)
-        cache_disk = CacheDisk.find_free_cache_disk(qs)
+        cache_disk = CacheDisk.find_free_cache_disk(hl)
         # check that a CacheDisk was found, if not return an error
         if not cache_disk:
             error_data["error"] = "No CacheDisk found with enough free space for user's quota."
@@ -227,7 +227,7 @@ class UserView(View):
                     cache_path=user_path, cache_disk=cache_disk)
         user.save()
         # update the cache_disk allocated quotas
-        cache_disk.allocated_bytes += qs
+        cache_disk.allocated_bytes += hl
         cache_disk.save()
 
         # return the details
