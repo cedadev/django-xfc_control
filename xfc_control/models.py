@@ -11,7 +11,7 @@ import datetime
 import calendar
 import xfc_control.settings as settings
 
-
+@python_2_unicode_compatible
 class CacheDisk(models.Model):
     """Allocated area(s) of disk(s) to hold cached files.  Users will be allocated space
     on a disk, depending on their quota and which disk has free space.
@@ -29,7 +29,7 @@ class CacheDisk(models.Model):
                                     help_text="Amount of space allocated to users")
     used_bytes = FileSizeField(default=0,
                                help_text="Used value calculated by update daemon")
-    def __unicode__(self):
+    def __str__(self):
         return "%s" % self.mountpoint
 
     def formatted_used(self):
@@ -95,6 +95,7 @@ class CacheDisk(models.Model):
         return user_path
 
 
+@python_2_unicode_compatible
 class User(models.Model):
     """User of the transfer cache disk(s).  Users will be allocated space on a CacheDisk
     depending on which CacheDisk has free space.
@@ -118,7 +119,7 @@ class User(models.Model):
     cache_path = models.CharField(max_length=2024, help_text="Relative path to cache area")
     cache_disk = models.ForeignKey(CacheDisk, help_text="Cache disk allocated to the user")
 
-    def __unicode__(self):
+    def __str__(self):
         return "%s (%s / %s)" % (self.name, filesizeformat(self.quota_used), filesizeformat(self.quota_size))
 
     def formatted_used(self):
@@ -152,6 +153,7 @@ class User(models.Model):
         return qs
 
 
+@python_2_unicode_compatible
 class UserLock(models.Model):
     """Entry to lock a user's cache directory.  This allows multiple instances of the management
     scripts to run without any errors due to the scripts acting on the same directory when (for
@@ -162,6 +164,7 @@ class UserLock(models.Model):
     user_lock = models.ForeignKey(User, blank=True, help_text="User that is locked")
 
 
+@python_2_unicode_compatible
 class CachedFile(models.Model):
     """Description of a cached file.  These files are added by the xfc_scan.py Daemon.
 
@@ -183,7 +186,7 @@ class CachedFile(models.Model):
     def full_path(self):
         return os.path.join(self.user.cache_disk.mountpoint, self.path)
 
-    def __unicode__(self):
+    def __str__(self):
         d = self.first_seen
         return "%s (%s) (%02d %s %04d %02d:%02d)" % (
           os.path.join(self.user.cache_disk.mountpoint, self.path), filesizeformat(self.size),
@@ -197,6 +200,7 @@ class CachedFile(models.Model):
         return use
 
 
+@python_2_unicode_compatible
 class ScheduledDeletion(models.Model):
     """Description of the deletion of a file which will take place in the future.
     The date the deletion was entered into the schedule is kept so that the user can touch the files, whereupon
@@ -217,5 +221,5 @@ class ScheduledDeletion(models.Model):
     delete_files = models.ManyToManyField(CachedFile, default=None,
                                           help_text="The list of files to be deleted in this schedule")
 
-    def __unicode__(self):
+    def __str__(self):
         return "%s" % self.user.name
