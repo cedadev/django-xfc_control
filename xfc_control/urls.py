@@ -1,6 +1,6 @@
 
 from django.conf.urls import url, include
-from views import *
+from xfc_control.views import *
 
 urlpatterns = (
     url(r'^api/v1/disk$', CacheDiskView.as_view()),

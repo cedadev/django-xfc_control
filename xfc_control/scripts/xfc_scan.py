@@ -22,6 +22,7 @@ def setup_logging(module_name):
     except:
         log_path = "./"
 
+    # xfc only runs once a day
     date = datetime.datetime.utcnow()
     date_string = "%d%02i%02i" % (date.year, date.month, date.day)
     log_fname = log_path + "/" + module_name+ "_" + date_string

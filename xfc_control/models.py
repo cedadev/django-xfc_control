@@ -9,7 +9,7 @@ import os, sys
 import subprocess
 import datetime
 import calendar
-import settings
+import xfc_control.settings as settings
 
 
 class CacheDisk(models.Model):
@@ -78,7 +78,6 @@ class CacheDisk(models.Model):
 
         # create the cache area for all users
         if not os.path.exists(cache_path):
-            print "!"
             # have to use subprocess to do as sudo
             subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", cache_path, "-m", "755"])
 
