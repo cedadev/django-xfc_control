@@ -17,9 +17,9 @@ import logging
 from django.core.mail import send_mail
 
 from xfc_control.models import User, CachedFile, ScheduledDeletion
-from xfc_user_lock import lock_user, user_locked, unlock_user
-from xfc_scan import update_cache_disk_used_space, calc_user_quota, calc_user_used_space
-from xfc_scan import setup_logging, get_log_time_string
+from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
+from xfc_control.scripts.xfc_scan import update_cache_disk_used_space, calc_user_quota, calc_user_used_space
+from xfc_control.scripts.xfc_scan import setup_logging, get_log_time_string
 
 
 def send_notification_email(user, file_list, date):
@@ -35,10 +35,10 @@ def send_notification_email(user, file_list, date):
     # to address is notify_on_first
     toaddrs = [user.email]
     # from address is just a dummy address
-    fromaddr = "xfc@ceda.ac.uk"
+    fromaddr = "support@ceda.ac.uk"
 
     # subject
-    subject = "[CEDA XFC] - Files deleted"
+    subject = "[XFC] - Files deleted"
     date_string = "% 2i %s %d %02d:%02d" % (date.day, calendar.month_abbr[date.month], date.year, date.hour, date.minute)
 
     msg = "The following files have been deleted on " + date_string + " UTC\n\n"

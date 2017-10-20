@@ -6,7 +6,7 @@
 """
 
 from xfc_control.models import User, CacheDisk, CachedFile
-from xfc_scan import calc_user_quota
+from xfc_control.scripts.xfc_scan import calc_user_quota
 import os
 
 def fix_user_quotas():

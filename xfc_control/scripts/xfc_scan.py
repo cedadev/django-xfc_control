@@ -7,7 +7,7 @@ entries to CachedFile.
 """
 
 from xfc_control.models import User, CachedFile
-from xfc_user_lock import lock_user, user_locked, unlock_user
+from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
 import datetime
 import calendar
 import os
