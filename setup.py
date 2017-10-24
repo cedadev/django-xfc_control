@@ -9,14 +9,18 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='xfc_control',
-    version='0.1',
+    version='0.4.4',
     packages=['xfc_control'],
     install_requires=[
         'django',
         'django-sizefield',
         'django-extensions',
         'django-multiselectfield',
-        'psycopg2'
+        'psycopg2',
+        'jasmin-ldap',
+    ],
+    dependency_links=[
+        'git+https://github.com/cedadev/jasmin-ldap.git@v0.3#egg=jasmin-ldap-0.3',
     ],
     include_package_data=True,
     license='my License',  # example license

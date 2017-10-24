@@ -221,18 +221,23 @@ class UserView(View):
             return HttpError(error_data, status=403)
 
         # create cache path
-        user_path = cache_disk.create_user_cache_path(username)
-        # create user object
-        user = User(name = username, email=email, quota_size=qs, quota_used=0, hard_limit_size=hl, total_used=0,
-                    cache_path=user_path, cache_disk=cache_disk)
-        user.save()
+        try:
+            user_path = cache_disk.create_user_cache_path(username)
+            # create user object
+            user = User(name = username, email=email, quota_size=qs, quota_used=0, hard_limit_size=hl, total_used=0,
+                        cache_path=user_path, cache_disk=cache_disk)
+            user.save()
+        except Exception as e:
+            error_data["error"] = str(e)
+            return HttpError(error_data, status=500)
         # update the cache_disk allocated quotas
         cache_disk.allocated_bytes += hl
         cache_disk.save()
 
         # return the details
         data_out = {"name" : username, "email" : email,
-                    "cache_path" : os.path.join(user.cache_disk.mountpoint, user_path), "quota_size" : qs}
+                    "cache_path" : os.path.join(user.cache_disk.mountpoint, user_path),
+                    "quota_size" : qs, "hard_limit_size" : hl}
         return HttpResponse(json.dumps(data_out), content_type="application/json")
 
 
@@ -370,6 +375,7 @@ class CachedFileView(View):
 
                  - **path** (`string`): path to the file
                  - **size** (`integer`): size of the file (in bytes)
+                 - **quota_used** (`integer`): amount of temporal quota used
                  - **first_seen** (`string`): date the file was first seen in the system, in isoformat
 
              :statuscode 200: request completed successfully.
@@ -423,10 +429,14 @@ class CachedFileView(View):
             # filter the files on user and matching key
             cfiles = CachedFile.objects.filter(user=user, path__contains=match)
             data = []
+            # get the current date for calculating quota used
+            current_date = datetime.datetime.utcnow()
             # loop over the files and build the output
             for f in cfiles:
-                # output the size
-                file_entry = {"size": f.size, "first_seen": f.first_seen.isoformat()}
+                # calculate the quota used
+                quota_used = ((current_date - f.first_seen).days + 1) * f.size
+                # output the size, date and quota used
+                file_entry = {"size": f.size, "first_seen": f.first_seen.isoformat(), "quota_used": quota_used}
                 # output the full path or not
                 if full_path:
                     file_entry["path"] = os.path.join(user.cache_disk.mountpoint, f.path)
@@ -712,7 +722,7 @@ def predict(request):
         data = {"name": username,
                 "files": []}
         return HttpResponse(json.dumps(data), content_type="application/json")
-        
+
     n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
     # create the date
     current_date = datetime.datetime.utcnow()
@@ -743,4 +753,3 @@ def predict(request):
             "over_quota": over_quota,
             "files": files_to_delete}
     return HttpResponse(json.dumps(data), content_type="application/json")
-

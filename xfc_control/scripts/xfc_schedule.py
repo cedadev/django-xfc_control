@@ -20,7 +20,7 @@ from django.core.mail import send_mail
 from xfc_control.models import User, ScheduledDeletion, CachedFile
 from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
 from xfc_control.scripts.xfc_scan import setup_logging, get_log_time_string
-import xfc_control.settings as settings
+import xfc_site.settings as settings
 
 
 def send_notification_email(user, file_list, date):
@@ -83,7 +83,7 @@ def schedule_deletions(user):
         # the over_quota and over_limit could be negative, if the user is not
         # over their quota limit or hard limit
         # also check the file age, to check it's not over the MAX_PERSISTENCE
-        if quota_delete > over_quota and hard_delete > over_limit and file_age < settings.DEFAULT_MAX_PERSISTENCE:
+        if quota_delete > over_quota and hard_delete > over_limit and file_age < settings.XFC_DEFAULT_MAX_PERSISTENCE:
             continue
         # keep a running total
         quota_delete += cf.quota_use()
@@ -100,7 +100,7 @@ def schedule_deletions(user):
     sd.user = user
     sd.time_entered = current_date
     # users have 24 hours to save their files!
-    sd.time_delete =  current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours)
+    sd.time_delete = current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours)
     sd.save()
     # deletion files
     sd.delete_files = CachedFile.objects.filter(user=user, path__in=files_to_delete)

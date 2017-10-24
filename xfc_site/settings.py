@@ -104,11 +104,22 @@ STATIC_ROOT = '/var/www/static'
 
 
 # Email
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-SERVER_EMAIL = DEFAULT_FROM_EMAIL = 'xfc-control@xfc-control.ceda.ac.uk'
+# Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+SERVER_EMAIL = DEFAULT_FROM_EMAIL = 'xfc@xfc.ceda.ac.uk'
+
 
 
 # Put your custom settings here.
-ALLOWED_HOSTS=["192.168.51.25", 
+ALLOWED_HOSTS=["192.168.51.25",
                "192.168.51.25"]
+
+# App specific settings file for the xfc_control app
+XFC_LOG_PATH = "/var/log/xfc"
+XFC_DEFAULT_QUOTA_SIZE = 300*1024*1024*1024*1024   # default quota size (2GB)
+XFC_DEFAULT_HARD_LIMIT =  40*1024*1024*1024*1024   # default hard limit size (2GB)
+XFC_DEFAULT_MAX_PERSISTENCE = 365                  # default maximum time a file is allowed to persist for
+XFC_LDAP_BASE_USER = "OU=jasmin,OU=People,O=hpc,DC=rl,DC=ac,DC=uk"
+XFC_LDAP_PRIMARY = "ldap://homer.esc.rl.ac.uk"
+XFC_LDAP_REPLICAS = ["ldap://marge.esc.rl.ac.uk", "ldap://wiggum.jc.rl.ac.uk"]
 

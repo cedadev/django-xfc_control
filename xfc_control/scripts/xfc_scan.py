@@ -12,13 +12,13 @@ import datetime
 import calendar
 import os
 import logging
-import xfc_control.settings as settings
+import xfc_site.settings as settings
 
 
 def setup_logging(module_name):
     # setup the logging
     try:
-        log_path = settings.LOG_PATH
+        log_path = settings.XFC_LOG_PATH
     except:
         log_path = "./"
 

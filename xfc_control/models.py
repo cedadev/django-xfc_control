@@ -6,11 +6,16 @@ from django.utils.encoding import python_2_unicode_compatible
 
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
+
+from jasmin_ldap.core import *
+from jasmin_ldap.query import *
+
 import os, sys
 import subprocess
 import datetime
 import calendar
-import xfc_control.settings as settings
+import xfc_site.settings as settings
+
 
 @python_2_unicode_compatible
 class CacheDisk(models.Model):
@@ -87,10 +92,23 @@ class CacheDisk(models.Model):
             # have to use subprocess to do as sudo
             subprocess.call(["/usr/bin/sudo", "/bin/mkdir", "-p", total_path, "-m", "700"])
 
-            # transfer ownership to the user
-            groupname = "users"
-            # have to use subprocess to do as sudo
-            subprocess.call(["/usr/bin/sudo", "/bin/chown", username+":"+groupname, total_path])
+            # transfer ownership to the user - first we have to get the numeric uid and gid from the ldap server
+            servers = ServerPool(settings.XFC_LDAP_PRIMARY, settings.XFC_LDAP_REPLICAS)
+            with Connection.create(servers) as conn:
+                # form the query
+                query = Query(conn, base_dn=settings.XFC_LDAP_BASE_USER).filter(uid=username)
+                # check for a valid return
+                if len(query) == 0:
+                    raise BaseException("Username: {} not found in create_user_cache_path".format(username))
+                # use just the first returned result
+                q = query[0]
+                # # check that the keys exist in q
+                if not ("uidNumber" in q and "gidNumber" in q):
+                    raise BaseException("uidNumber and / or gidNumber not in returned LDAP query for user {}".format(username))
+                # form the user:group string
+                uidgid = str(q["uidNumber"][0]) + ":" + str(q["gidNumber"][0])
+                # have to use subprocess to do as sudo
+                subprocess.call(["/usr/bin/sudo", "/bin/chown", "-R", uidgid, total_path])
 
         # return just the user path - will facilitate moving entire user directories to a new cache disk
         return user_path
@@ -143,14 +161,14 @@ class User(models.Model):
     def get_quota_size():
         """Get the initial size of the quota for the user.  This could be algorithmically
            determined, but at the moment is just fixed at 2GB."""
-        qs = settings.DEFAULT_QUOTA_SIZE
+        qs = settings.XFC_DEFAULT_QUOTA_SIZE
         return qs
 
     @staticmethod
     def get_hard_limit_size():
         """Get the initial size of the hard limit for the user.  This could be algorithmically
            determined, but at the moment is just fixed at 2GB."""
-        qs = settings.DEFAULT_HARD_LIMIT
+        qs = settings.XFC_DEFAULT_HARD_LIMIT
         return qs
 
 
