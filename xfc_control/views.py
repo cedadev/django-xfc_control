@@ -5,6 +5,8 @@ from xfc_control.models import *
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, Http404
 from django.views.generic import View
+from django.core.mail import send_mail
+
 import json
 import os
 import datetime
@@ -14,6 +16,32 @@ def HttpError(error_data, status=404):
     """Function that returns a 404 (or other status) HTTP error."""
     return HttpResponse(json.dumps(error_data),
                         content_type="application/json", status=status, reason=error_data["error"])
+
+
+def send_notification_email(user, notify):
+    """Send an email to the user to confirm that notifications have been switched on
+    :var xfc_control.models.User user: user to send notification email to
+    """
+    # to address is user.email
+    toaddrs = [user.email]
+    # from address is just a dummy address
+    fromaddr = "support@ceda.ac.uk"
+
+    # subject
+    subject = "[XFC] - Notifications"
+    if notify:
+	    subject += " ON"
+    else:
+	    subject += " OFF"
+
+    msg = "This email confirms that JASMIN user: " + str(user.name) + " will "
+    if not notify:
+        msg += "no longer "
+    msg += "be notified when "+\
+           "files are scheduled for deletion from the JASMIN transfer cache (XFC)."
+
+    send_mail(subject, msg, fromaddr, toaddrs, fail_silently=False)
+
 
 class UserView(View):
     """:rest-api
@@ -82,10 +110,10 @@ class UserView(View):
                     user = User.objects.get(name=username)
                 else:
                     error_data["error"] = "Error with name parameter."
-                    return HttpError(data)
+                    return HttpError(error_data)
             except:
                 error_data["error"] = "User not found."
-                return HttpError(data)
+                return HttpError(error_data)
 
             # create the path to the cache area
             cache_path = os.path.join(user.cache_disk.mountpoint, user.cache_path)
@@ -336,8 +364,11 @@ class UserView(View):
                 user.email = data["email"]
             else:
                 data["email"] = user.email
+
             if "notify" in data:
                 user.notify = data["notify"]
+                # create and send a confirmation email to the user
+                send_notification_email(user, user.notify)
             else:
                 data["notify"] = user.notify
             user.save()
