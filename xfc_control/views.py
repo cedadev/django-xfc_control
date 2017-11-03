@@ -439,6 +439,7 @@ class CachedFileView(View):
                  ]
 
         """
+        error_data = {}
         if len(request.GET) == 0:
             return HttpError({"error" : "No name supplied."})
         else:
@@ -473,6 +474,8 @@ class CachedFileView(View):
                     file_entry["path"] = os.path.join(user.cache_disk.mountpoint, f.path)
                 else:
                     file_entry["path"] = f.path
+                # return the cache disk as well
+                file_entry["cache_disk"] = user.cache_disk.mountpoint
                 data.append(file_entry)
             return HttpResponse(json.dumps(data), content_type = "application/json")
 
@@ -541,6 +544,7 @@ class CacheDiskView(View):
         """
         # first case - get all disks
         disks = []
+        error_data = data
         if len(request.GET) == 0:
             for disk in CacheDisk.objects.all():
                 disk_data = {"id": disk.pk,
@@ -639,6 +643,7 @@ class ScheduledDeletionView(View):
 
         """
         # First get the user details
+        error_data = {}
         if len(request.GET) == 0:
             return HttpError({"error" : "No name supplied."})
         else:
@@ -655,6 +660,7 @@ class ScheduledDeletionView(View):
                 return HttpError(error_data)
         # Now get the scheduled deletions
         scheduled_deletions = ScheduledDeletion.objects.filter(user=user)
+        current_date = datetime.datetime.utcnow()
         if len(scheduled_deletions) == 0:  # no scheduled deletions for this user
             # return JSON with null strings for the times and an empty list for the files
             data = [{"name": username, "time_entered": "", "time_delete": "", "cache_disk":"", "files": []}]
@@ -663,12 +669,23 @@ class ScheduledDeletionView(View):
             # there should only be one scheduled deletion, but there may be more in the future
             # so return as a list for flexibility
             for sd in scheduled_deletions:
+                # create the file entries with all the info for the files
+                files = []
+                for f in sd.delete_files.all():
+                    # calculate the quota used
+                    quota_used = ((current_date - f.first_seen).days + 1) * f.size
+                    c_file = {"cache_disk" : f.user.cache_disk.mountpoint,
+                              "path" : f.path,
+                              "size" : f.size,
+                              "first_seen" : f.first_seen.isoformat(),
+                              "quota_used" : quota_used}
+                    files.append(c_file)
                 # output this scheduled deletion data
                 data.append({"name": sd.user.name,
                              "time_entered": sd.time_entered.isoformat(),
                              "time_delete": sd.time_delete.isoformat(),
                              "cache_disk": sd.user.cache_disk.mountpoint,
-                             "files": [os.path.join(f.path) for f in sd.delete_files.all()]})
+                             "files": files})
         return HttpResponse(json.dumps(data), content_type = "application/json")
 
 
@@ -731,6 +748,7 @@ def predict(request):
 
     """
     # First get the user details
+    error_data = {}
     if len(request.GET) == 0:
         return HttpError({"error": "No name supplied."})
     else:
@@ -776,7 +794,14 @@ def predict(request):
         # keep a running total
         quota_delete += cf.quota_use()
         # add the files
-        files_to_delete.append(cf.path)
+        # calculate the quota used
+        quota_used = ((current_date - cf.first_seen).days + 1) * cf.size
+        c_file = {"cache_disk" : cf.user.cache_disk.mountpoint,
+                  "path" : cf.path,
+                  "size" : cf.size,
+                  "first_seen" : cf.first_seen.isoformat(),
+                  "quota_used" : quota_used}
+        files_to_delete.append(c_file)
 
     data = {"name": username,
             "time_predict": deletion_date.isoformat(),
