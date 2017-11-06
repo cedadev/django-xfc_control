@@ -232,7 +232,7 @@ class ScheduledDeletion(models.Model):
     :var models.ForeignKey user: user that the ScheduledDeletion will target
     """
 
-    schedule_hours = 24  # number of hours before file is deleted
+    schedule_hours = 72  # number of hours before file is deleted
 
     time_entered = models.DateTimeField(blank=True, null=True,
                                         help_text="Date the deletion was entered into the scheduler")
