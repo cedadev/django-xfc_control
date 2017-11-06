@@ -773,6 +773,11 @@ def predict(request):
         return HttpResponse(json.dumps(data), content_type="application/json")
 
     n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
+    # check for n_days being large - return 0 files for "never exceeded"
+    if n_days > int(1e6):
+        data = {"name": username,
+                "files": []}
+        return HttpResponse(json.dumps(data), content_type="application/json")
     # create the date
     current_date = datetime.datetime.utcnow()
     deletion_date = current_date + datetime.timedelta(hours=ScheduledDeletion.schedule_hours * n_days)
