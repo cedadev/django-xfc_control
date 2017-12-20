@@ -796,11 +796,11 @@ def predict(request):
     for cf in cached_files:
         if quota_delete > over_quota:
             break
-        # keep a running total
-        quota_delete += cf.quota_use()
         # add the files
         # calculate the quota used
         quota_used = ((current_date - cf.first_seen).days + 1) * cf.size
+        # keep a running total
+        quota_delete += quota_used
         c_file = {"cache_disk" : cf.user.cache_disk.mountpoint,
                   "path" : cf.path,
                   "size" : cf.size,

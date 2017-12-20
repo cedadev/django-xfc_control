@@ -23,7 +23,7 @@ class UserAdmin(admin.ModelAdmin):
     fields = ('name', 'email', 'notify', 'quota_size', 'formatted_used',
               'hard_limit_size', 'formatted_total_used', 'cache_disk', 'cache_path')
     search_fields = ('name', 'email')
-    readonly_fields = ('email', 'formatted_used', 'formatted_total_used', 'cache_path')
+    readonly_fields = ('email', 'formatted_used', 'formatted_total_used')
 admin.site.register(User, UserAdmin)
 
 class UserLockAdmin(admin.ModelAdmin):

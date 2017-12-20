@@ -212,9 +212,10 @@ class CachedFile(models.Model):
           os.path.join(self.user.cache_disk.mountpoint, self.path), filesizeformat(self.size),
                        d.day, calendar.month_abbr[d.month], d.year, d.hour, d.minute)
 
-    def quota_use(self):
+    def quota_use(self, current_date = None):
         """Get the amount of quota the file will use up"""
-        current_date = datetime.datetime.utcnow()
+        if current_date == None:
+            current_date = datetime.datetime.utcnow()
         days_persistent = (current_date - self.first_seen).days + 1
         use = self.size * days_persistent
         return use
