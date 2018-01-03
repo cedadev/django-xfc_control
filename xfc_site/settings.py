@@ -90,6 +90,12 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# IMPORTANT: CookieStorage (and hence FallbackStorage, which is the default) interacts
+#            badly with Chrome's prefetching, causing messages to be rendered twice
+#            or not at all...!
+MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
+
+
 # Internationalization
 LANGUAGE_CODE = 'en-gb'
 TIME_ZONE = 'UTC'
