@@ -13,7 +13,7 @@ setup(
     packages=['xfc_control'],
     install_requires=[
         'appdirs',
-        'django',
+        'django==1.11.1',
         'django-sizefield',
         'django-extensions',
         'django-multiselectfield',
