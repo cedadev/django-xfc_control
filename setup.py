@@ -9,7 +9,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='xfc_control',
-    version='0.4.6',
+    version='0.4.7',
     packages=['xfc_control'],
     install_requires=[
         'appdirs',
@@ -17,7 +17,7 @@ setup(
         'django-sizefield',
         'django-extensions',
         'django-multiselectfield',
-        'psycopg2',
+        'psycopg2-binary',
         'packaging',
         'pyparsing',
         'pytz',

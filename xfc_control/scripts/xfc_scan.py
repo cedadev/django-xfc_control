@@ -6,37 +6,27 @@ entries to CachedFile.
   ``python manage.py runscript xfc_scan``
 """
 
-from xfc_control.models import User, CachedFile
-from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
 import datetime
 import calendar
 import os
 import logging
+from time import sleep
+import signal, sys
+
+from xfc_control.models import User, CachedFile
+from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
 import xfc_site.settings as settings
 
-
-def setup_logging(module_name):
-    # setup the logging
-    try:
-        log_path = settings.XFC_LOG_PATH
-    except:
-        log_path = "./"
-
-    # xfc only runs once a day
-    date = datetime.datetime.utcnow()
-    date_string = "%d%02i%02i" % (date.year, date.month, date.day)
-    log_fname = log_path + "/" + module_name+ "_" + date_string
-
-    logging.basicConfig(filename=log_fname, level=logging.DEBUG)
-
+from xfc_control.scripts.config import read_process_config, split_args
+from xfc_control.scripts.config import get_logging_format, get_logging_level
 
 def get_log_time_string():
     current_time = datetime.datetime.utcnow()
     current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-        current_time.day, calendar.month_abbr[current_time.month], current_time.year, current_time.hour,
+        current_time.day, calendar.month_abbr[current_time.month],
+        current_time.year, current_time.hour,
         current_time.minute, current_time.second)
     return current_time_string
-
 
 def scan_for_added_files(user):
     """Scan the user directory and add the files as CachedFile objects.
@@ -58,7 +48,9 @@ def scan_for_added_files(user):
                 try:
                     filesize = os.path.getsize(filepath)
                 except os.error:
-                    logging.error("[" + current_time_string + "] Could not find file with path: " + filepath)
+                    logging.error(
+                        "[" + current_time_string + "] Could not find file with path: " + filepath
+                    )
                     continue
                 try:
                     # create the short filepath, that does not include the cache disk mountpoint
@@ -68,9 +60,13 @@ def scan_for_added_files(user):
                         mp += "/"
                     sh_filepath = filepath.replace(mp,"")
                     # check whether this file already exists
-                    current_file = CachedFile.objects.filter(user=user, path=sh_filepath)
+                    current_file = CachedFile.objects.filter(
+                        user=user, path=sh_filepath
+                    )
                     if len(current_file) == 0:
-                        logging.info("[" + current_time_string + "] Adding file: " + filepath)
+                        logging.info(
+                            "[" + current_time_string + "] Adding file: " + filepath
+                        )
                         # create the CachedFile
                         cf = CachedFile()
                         cf.user = user
@@ -81,11 +77,15 @@ def scan_for_added_files(user):
                         cf.save()
                     elif current_file[0].size != filesize:
                         # check whether this file's size has changed
-                        logging.info("[" + current_time_string + "] File size changed: " + filepath)
+                        logging.info(
+                            "[" + current_time_string + "] File size changed: " + filepath
+                        )
                         current_file[0].size = filesize
                         current_file[0].save()
                 except:
-                    logging.error("[" + current_time_string + "] Could not create CachedFile with path: " + filepath)
+                    logging.error(
+                        "[" + current_time_string + "] Could not create CachedFile with path: " + filepath
+                    )
 
 
 def scan_for_deleted_files(user):
@@ -99,14 +99,17 @@ def scan_for_deleted_files(user):
 
         current_time = datetime.datetime.utcnow()
         current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-            current_time.day, calendar.month_abbr[current_time.month], current_time.year, current_time.hour,
+            current_time.day, calendar.month_abbr[current_time.month],
+            current_time.year, current_time.hour,
             current_time.minute, current_time.second)
 
         # get the filepath as the concatenation of the mountpoint and path
         filepath = os.path.join(user.cache_disk.mountpoint, file.path)
         # check whether the file exists
         if not os.path.exists(filepath):
-            logging.info("[" + current_time_string + "] Deleting file: " + filepath)
+            logging.info(
+                "[" + current_time_string + "] Deleting file: " + filepath
+            )
             file.delete()
 
 
@@ -127,7 +130,8 @@ def calc_user_quota(user):
 
     # calculate used
     for file in cached_files:
-        # get the time delta in days - add one so that the quota is used on the first day the file was seen
+        # get the time delta in days - add one so that the quota is used on
+        # the first day the file was seen
         quota_sum += file.quota_use()
     # update the user and save
     user.quota_used = quota_sum
@@ -136,7 +140,8 @@ def calc_user_quota(user):
 
 def calc_user_used_space(user):
     """Calculate how much space on the cache disk the user has used.
-       This is different to the quota as there is no temporal element to this number
+       This is different to the quota as there is no temporal element to this
+       number
        :var xfc_control.models.User user: instance of User to calculate
     """
     # get all the cached files
@@ -161,17 +166,19 @@ def update_cache_disk_used_space(user, amount):
     cd.used_bytes += amount
     cd.save()
 
+def exit_handler(signal, frame):
+    logging.info("Stopping xfc_scan")
+    sys.exit(0)
 
-def run():
-    """Entry point for the Django script run via ``./manage.py runscript``
-    """
-    setup_logging(__name__)
-
+def run_loop(config):
+    """Run the main loop"""
     # loop over all the users
     for user in User.objects.all():
         # check if user locked
         if user_locked(user):
-            logging.info("[" + get_log_time_string() + "] User already locked: " + user.name)
+            logging.info(
+                "[" + get_log_time_string() + "] User already locked: " + user.name
+            )
             continue
         # lock the user
         lock_user(user)
@@ -189,3 +196,39 @@ def run():
         update_cache_disk_used_space(user, user.total_used-old_user_used_space)
         # unlock the user
         unlock_user(user)
+
+def run(*args):
+    """Entry point for the Django script run via ``./manage.py runscript``
+    """
+    # setup the logging
+    config = read_process_config("xfc_scan")
+    logging.basicConfig(
+        format=get_logging_format(),
+        level=get_logging_level(config["LOG_LEVEL"]),
+        datefmt='%Y-%d-%m %I:%M:%S'
+    )
+    logging.info("Starting xfc_scan")
+
+    # setup exit signal handling
+    signal.signal(signal.SIGINT, exit_handler)
+    signal.signal(signal.SIGHUP, exit_handler)
+    signal.signal(signal.SIGTERM, exit_handler)
+
+    # decide whether to run as a daemon
+    arg_dict = split_args(args)
+    if "daemon" in arg_dict:
+        if arg_dict["daemon"].lower() == "true":
+            daemon = True
+        else:
+            daemon = False
+    else:
+        daemon = False
+
+    # run as a daemon or one shot
+    if daemon:
+        # loop this indefinitely until the exit signals are triggered
+        while True:
+            run_loop(config)
+            sleep(5)
+    else:
+        run_loop(config)

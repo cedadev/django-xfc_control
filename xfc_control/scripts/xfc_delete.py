@@ -13,13 +13,18 @@
 import datetime, calendar
 import os
 import logging
+from time import sleep
+import signal, sys
 
 from django.core.mail import send_mail
 
 from xfc_control.models import User, CachedFile, ScheduledDeletion
 from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
 from xfc_control.scripts.xfc_scan import update_cache_disk_used_space, calc_user_quota, calc_user_used_space
-from xfc_control.scripts.xfc_scan import setup_logging, get_log_time_string
+from xfc_control.scripts.xfc_scan import get_log_time_string
+
+from xfc_control.scripts.config import read_process_config, split_args
+from xfc_control.scripts.config import get_logging_format, get_logging_level
 
 
 def send_notification_email(user, file_list, date):
@@ -111,9 +116,12 @@ def do_deletions(user):
     if user.notify:
         send_notification_email(user, files_to_delete, datetime.datetime.utcnow())
 
-def run():
-    setup_logging(__name__)
+def exit_handler(signal, frame):
+    logging.info("Stopping xfc_delete")
+    sys.exit(0)
 
+def run_loop(config):
+    """Main loop."""
     for user in User.objects.all():
         # check if user locked
         if user_locked(user):
@@ -125,3 +133,39 @@ def run():
             do_deletions(user)
         # unlock the user
         unlock_user(user)
+
+def run(*args):
+    """Entry point for the Django script run via ``./manage.py runscript``
+    """
+    # setup the logging
+    config = read_process_config("xfc_delete")
+    logging.basicConfig(
+        format=get_logging_format(),
+        level=get_logging_level(config["LOG_LEVEL"]),
+        datefmt='%Y-%d-%m %I:%M:%S'
+    )
+    logging.info("Starting xfc_delete")
+
+    # setup exit signal handling
+    signal.signal(signal.SIGINT, exit_handler)
+    signal.signal(signal.SIGHUP, exit_handler)
+    signal.signal(signal.SIGTERM, exit_handler)
+
+    # decide whether to run as a daemon
+    arg_dict = split_args(args)
+    if "daemon" in arg_dict:
+        if arg_dict["daemon"].lower() == "true":
+            daemon = True
+        else:
+            daemon = False
+    else:
+        daemon = False
+
+    # run as a daemon or one shot
+    if daemon:
+        # loop this indefinitely until the exit signals are triggered
+        while True:
+            run_loop(config)
+            sleep(5)
+    else:
+        run_loop(config)

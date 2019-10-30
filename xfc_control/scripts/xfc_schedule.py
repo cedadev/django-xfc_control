@@ -14,13 +14,18 @@
 import datetime, calendar
 import os
 import logging
+from time import sleep
+import signal, sys
 
 from django.core.mail import send_mail
 
 from xfc_control.models import User, ScheduledDeletion, CachedFile
 from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
-from xfc_control.scripts.xfc_scan import setup_logging, get_log_time_string
+from xfc_control.scripts.xfc_scan import get_log_time_string
 import xfc_site.settings as settings
+
+from xfc_control.scripts.config import read_process_config, split_args
+from xfc_control.scripts.config import get_logging_format, get_logging_level
 
 
 def send_notification_email(user, file_list, date):
@@ -120,11 +125,12 @@ def schedule_deletions(user):
     for f in files_to_delete:
         logging.info("    " + os.path.join(user.cache_disk.mountpoint, f))
 
+def exit_handler(signal, frame):
+    logging.info("Stopping xfc_schedule")
+    sys.exit(0)
 
-def run():
-    """Entry point for the Django script run via ``./manage.py runscript``
-    """
-    setup_logging(__name__)
+def run_loop(config):
+    """Main loop"""
     # loop over all the users
     for user in User.objects.all():
         # check if user locked
@@ -133,9 +139,47 @@ def run():
         # lock the user
         lock_user(user)
         # schedule the deletions, there are three possibilities for files to be deleted:
-        # 1. the user's quota has been exceeded
+        # 1. the user's temporal quota has been exceeded
         # 2. the user's hard limit has been exceeded
-        # 3. some user's files are greater than the maximum persistence
+        # 3. some user's files are greater (in time) than the maximum persistence
         schedule_deletions(user)
         # unlock the user
         unlock_user(user)
+
+def run(*args):
+    """Entry point for the Django script run via ``./manage.py runscript``
+    """
+    # setup the logging
+    config = read_process_config("xfc_schedule")
+    logging.basicConfig(
+        format=get_logging_format(),
+        level=get_logging_level(config["LOG_LEVEL"]),
+        datefmt='%Y-%d-%m %I:%M:%S'
+    )
+    logging.info("Starting xfc_schedule")
+
+    # setup exit signal handling
+    signal.signal(signal.SIGINT, exit_handler)
+    signal.signal(signal.SIGHUP, exit_handler)
+    signal.signal(signal.SIGTERM, exit_handler)
+
+    # decide whether to run as a daemon
+    arg_dict = split_args(args)
+    if "daemon" in arg_dict:
+        if arg_dict["daemon"].lower() == "true":
+            daemon = True
+        else:
+            daemon = False
+    else:
+        daemon = False
+
+    # run as a daemon or one shot
+    if daemon:
+        # loop this indefinitely until the exit signals are triggered
+        while True:
+            run_loop(config)
+            sleep(5)
+    else:
+        run_loop(config)
+
+    setup_logging(__name__)

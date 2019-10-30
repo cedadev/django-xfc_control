@@ -67,8 +67,8 @@ DATABASES = {
         'default' : {
                                 'ENGINE' : 'django.db.backends.postgresql',
                                             'HOST' : '/tmp',
-                                            'ATOMIC_REQUESTS' : True,
                                             'NAME' : 'xfc_control',
+                                            'ATOMIC_REQUESTS' : True,
                         },
     }
 
