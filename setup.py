@@ -13,7 +13,7 @@ setup(
     packages=['xfc_control'],
     install_requires=[
         'appdirs',
-        'django==1.11.15',
+        'django==2.2.5',
         'django-sizefield',
         'django-extensions',
         'django-multiselectfield',
@@ -38,10 +38,8 @@ setup(
         'License :: OSI Approved :: BSD License', # example license
         'Operating System :: OS Independent',
         'Programming Language :: Python',
-        # Replace these appropriately if you are stuck on Python 2.
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
