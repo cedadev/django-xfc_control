@@ -9,7 +9,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='xfc_control',
-    version='0.4.8',
+    version='0.4.9',
     packages=['xfc_control'],
     install_requires=[
         'appdirs',
