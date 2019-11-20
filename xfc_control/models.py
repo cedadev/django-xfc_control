@@ -137,7 +137,7 @@ class User(models.Model):
     total_used = FileSizeField(default=0, help_text="Total size of all files owned by the user.")
 
     cache_path = models.CharField(max_length=2024, help_text="Relative path to cache area")
-    cache_disk = models.ForeignKey(CacheDisk, help_text="Cache disk allocated to the user")
+    cache_disk = models.ForeignKey(CacheDisk, help_text="Cache disk allocated to the user", on_delete=models.CASCADE)
 
     def __str__(self):
         return "%s (%s / %s)" % (self.name, filesizeformat(self.quota_used), filesizeformat(self.quota_size))
@@ -181,7 +181,7 @@ class UserLock(models.Model):
     :var models.ForeignKey user_lock: the user id that is currently locked
     """
 
-    user_lock = models.ForeignKey(User, blank=True, help_text="User that is locked")
+    user_lock = models.ForeignKey(User, blank=True, help_text="User that is locked", on_delete=models.CASCADE)
 
 
 @python_2_unicode_compatible
@@ -198,7 +198,7 @@ class CachedFile(models.Model):
     size = FileSizeField(default=0, help_text="Size of the file")
     first_seen = models.DateTimeField(blank=True, null=True,
                                       help_text="Date the file was first scanned by the cache_manager")
-    user = models.ForeignKey(User, help_text="User that owns the file", null=True)
+    user = models.ForeignKey(User, help_text="User that owns the file", null=True, on_delete=models.CASCADE)
 
     def formatted_size(self):
         return filesizeformat(self.size)
@@ -238,7 +238,7 @@ class ScheduledDeletion(models.Model):
     time_entered = models.DateTimeField(blank=True, null=True,
                                         help_text="Date the deletion was entered into the scheduler")
     time_delete  = models.DateTimeField(blank=True, null=True, help_text="Time the deletion will take place")
-    user = models.ForeignKey(User, help_text="User that the ScheduledDeletion belongs to")
+    user = models.ForeignKey(User, help_text="User that the ScheduledDeletion belongs to", on_delete=models.CASCADE)
     delete_files = models.ManyToManyField(CachedFile, default=None,
                                           help_text="The list of files to be deleted in this schedule")
 
