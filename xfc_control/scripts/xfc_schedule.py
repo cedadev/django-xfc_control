@@ -193,6 +193,7 @@ def run(*args):
         # an initial run
         previous_time = datetime.datetime.utcnow() - time_period
         while True:
+            current_time = datetime.datetime.utcnow()
             if (current_time - previous_time) > time_period:
                 run_loop(config)
                 previous_time = current_time
