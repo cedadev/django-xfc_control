@@ -60,6 +60,9 @@ def do_deletions(user):
     # get the scheduled deletion(s) that have a schedule time less than the current time
     # there should only be one (due to the user locking but we'll assume there may be more
     scheduled_deletions = ScheduledDeletion.objects.filter(user=user, time_delete__lt=datetime.datetime.utcnow())
+    # do nothing if no scheduled deletions
+    if scheduled_deletions.count() == 0:
+        return
 
     # keep a list of files to delete, as those with newer date will not be deleted
     files_to_delete = []
@@ -123,16 +126,25 @@ def exit_handler(signal, frame):
 def run_loop(config):
     """Main loop."""
     for user in User.objects.all():
+        logging.info(
+            "[" + get_log_time_string() + "] Running delete for user: " +
+            user.name
+        )
         # check if user locked
         if user_locked(user):
+            logging.info(
+                "[" + get_log_time_string() + "] User already locked: " + user.name
+            )
             continue
         # lock the user
-        lock_user(user)
-        # schedule the deletions if the quota used is greater than the quota allocated
-        if user.quota_used > user.quota_size or user.total_used > user.hard_limit_size:
+        try:
+            lock_user(user)
             do_deletions(user)
-        # unlock the user
-        unlock_user(user)
+            # unlock the user
+            unlock_user(user)
+        except Exception as e:
+            unlock_user(user)
+            raise Exception(e)
 
 def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
@@ -164,8 +176,15 @@ def run(*args):
     # run as a daemon or one shot
     if daemon:
         # loop this indefinitely until the exit signals are triggered
+        # RUN_EVERY_HOURS determines the period that the scan should run
+        time_period = datetime.timedelta(hours=config["RUN_EVERY_HOURS"])
+        # set previous time to current time minus the RUN_EVERY_HOURS to force
+        # an initial run
+        previous_time = datetime.datetime.utcnow() - time_period
         while True:
-            run_loop(config)
-            sleep(5)
+            if (current_time - previous_time) > time_period:
+                run_loop(config)
+                previous_time = current_time
+                sleep(5)
     else:
         run_loop(config)

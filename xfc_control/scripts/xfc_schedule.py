@@ -133,8 +133,15 @@ def run_loop(config):
     """Main loop"""
     # loop over all the users
     for user in User.objects.all():
+        logging.info(
+            "[" + get_log_time_string() + "] Running schedule for user: " +
+            user.name
+        )
         # check if user locked
         if user_locked(user):
+            logging.info(
+                "[" + get_log_time_string() + "] User already locked: " + user.name
+            )
             continue
         # lock the user
         lock_user(user)
@@ -142,9 +149,13 @@ def run_loop(config):
         # 1. the user's temporal quota has been exceeded
         # 2. the user's hard limit has been exceeded
         # 3. some user's files are greater (in time) than the maximum persistence
-        schedule_deletions(user)
-        # unlock the user
-        unlock_user(user)
+        try:
+            schedule_deletions(user)
+            # unlock the user
+            unlock_user(user)
+        except Exception as e:
+            unlock_user(user)
+            raise Exception(e)
 
 def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
@@ -176,10 +187,15 @@ def run(*args):
     # run as a daemon or one shot
     if daemon:
         # loop this indefinitely until the exit signals are triggered
+        # RUN_EVERY_HOURS determines the period that the scan should run
+        time_period = datetime.timedelta(hours=config["RUN_EVERY_HOURS"])
+        # set previous time to current time minus the RUN_EVERY_HOURS to force
+        # an initial run
+        previous_time = datetime.datetime.utcnow() - time_period
         while True:
-            run_loop(config)
-            sleep(5)
+            if (current_time - previous_time) > time_period:
+                run_loop(config)
+                previous_time = current_time
+                sleep(5)
     else:
         run_loop(config)
-
-    setup_logging(__name__)

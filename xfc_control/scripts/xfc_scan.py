@@ -32,7 +32,7 @@ def scan_for_added_files(user):
     """Scan the user directory and add the files as CachedFile objects.
        :var xfc_control.models.User user: instance of User to scan
     """
-
+    logging.info("    Scanning for added files")
     # get the user directory
     user_dir = os.path.join(user.cache_disk.mountpoint, user.cache_path)
     # walk the directory
@@ -94,6 +94,7 @@ def scan_for_deleted_files(user):
        :var xfc_control.models.User user: instance of User to update
     """
     # loop over all the files
+    logging.info("    Scanning for deleted files")
     cached_files = CachedFile.objects.filter(user=user)
     for file in cached_files:
 
@@ -123,7 +124,7 @@ def calc_user_quota(user):
 
        :var xfc_control.models.User user: instance of User to update
     """
-
+    logging.info("    Calculating user quota")
     # get all the cached files
     cached_files = CachedFile.objects.filter(user=user)
     quota_sum = 0
@@ -144,6 +145,7 @@ def calc_user_used_space(user):
        number
        :var xfc_control.models.User user: instance of User to calculate
     """
+    logging.info("    Calculating used space")
     # get all the cached files
     cached_files = CachedFile.objects.filter(user=user)
     sum = 0
@@ -174,6 +176,11 @@ def run_loop(config):
     """Run the main loop"""
     # loop over all the users
     for user in User.objects.all():
+        logging.info(
+            "[" + get_log_time_string() + "] Running scan for user: " +
+            user.name
+        )
+
         # check if user locked
         if user_locked(user):
             logging.info(
@@ -182,20 +189,24 @@ def run_loop(config):
             continue
         # lock the user
         lock_user(user)
-        # get the current user quota
-        old_user_used_space = user.total_used
-        # scan the directories
-        scan_for_added_files(user)
-        # check for any files that have been deleted and remove them from the database
-        scan_for_deleted_files(user)
-        # calculate the user used_quota
-        calc_user_quota(user)
-        # calculate the total space used
-        calc_user_used_space(user)
-        # adjust the used space in the cache_disk
-        update_cache_disk_used_space(user, user.total_used-old_user_used_space)
-        # unlock the user
-        unlock_user(user)
+        try:
+            # get the current user quota
+            old_user_used_space = user.total_used
+            # scan the directories
+            scan_for_added_files(user)
+            # check for any files that have been deleted and remove them from the database
+            scan_for_deleted_files(user)
+            # calculate the user used_quota
+            calc_user_quota(user)
+            # calculate the total space used
+            calc_user_used_space(user)
+            # adjust the used space in the cache_disk
+            update_cache_disk_used_space(user, user.total_used-old_user_used_space)
+            # unlock the user
+            unlock_user(user)
+        except Exception as e:
+            unlock_user(user)
+            raise Exception(e)
 
 def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
@@ -227,8 +238,15 @@ def run(*args):
     # run as a daemon or one shot
     if daemon:
         # loop this indefinitely until the exit signals are triggered
+        # RUN_EVERY_HOURS determines the period that the scan should run
+        time_period = datetime.timedelta(hours=config["RUN_EVERY_HOURS"])
+        # set previous time to current time minus the RUN_EVERY_HOURS to force
+        # an initial run
+        previous_time = datetime.datetime.utcnow() - time_period
         while True:
-            run_loop(config)
-            sleep(5)
+            if (current_time - previous_time) > time_period:
+                run_loop(config)
+                previous_time = current_time
+                sleep(5)
     else:
         run_loop(config)
