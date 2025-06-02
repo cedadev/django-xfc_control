@@ -1,10 +1,15 @@
-appdirs==1.4.3
-Django==2.2.5
-django-extensions==2.2.1
-django-multiselectfield==0.1.8
-django-sizefield==1.0.0
-packaging==19.1
-psycopg2-binary==2.8.3
-pyparsing==2.4.2
-pytz==2019.2
--e git+https://github.com/cedadev/jasmin-ldap.git#egg=jasmin_ldap
+appdirs==1.4.4
+asgiref==3.8.1
+Django==4.2
+django-extensions==4.1
+django-multiselectfield==0.1.13
+django-sizefield==2.1.0
+jasmin-ldap @ git+https://github.com/cedadev/jasmin-ldap.git@c8bd7b4be00bc80105b475b809a00e9855a415ab
+ldap3==2.9.1
+packaging==25.0
+psycopg2-binary==2.9.10
+pyasn1==0.6.1
+pyparsing==3.2.3
+pytz==2025.2
+six==1.17.0
+sqlparse==0.5.3

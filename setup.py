@@ -9,11 +9,11 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='xfc_control',
-    version='0.4.9',
-    packages=['xfc_control'],
+    version='1.0.0',
+    packages=['xfc_control', 'xfc_site'],
     install_requires=[
         'appdirs',
-        'django==2.2.5',
+        'django==4.2',
         'django-sizefield',
         'django-extensions',
         'django-multiselectfield',
@@ -22,7 +22,7 @@ setup(
         'pyparsing',
         'pytz',
         'six',
-        'jasmin-ldap',
+        'jasmin-ldap @ git+https://github.com/cedadev/jasmin-ldap.git@v1.0.2#egg=jasmin-ldap',
     ],
     include_package_data=True,
     license='my License',  # example license
@@ -39,7 +39,7 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.9',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],

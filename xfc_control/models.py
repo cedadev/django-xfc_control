@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 
 from django.db import models
-from django.utils.encoding import python_2_unicode_compatible
 
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
@@ -16,7 +15,6 @@ import datetime
 import calendar
 import xfc_site.settings as settings
 
-@python_2_unicode_compatible
 class CacheDisk(models.Model):
     """Allocated area(s) of disk(s) to hold cached files.  Users will be allocated space
     on a disk, depending on their quota and which disk has free space.
@@ -115,7 +113,6 @@ class CacheDisk(models.Model):
         return user_path
 
 
-@python_2_unicode_compatible
 class User(models.Model):
     """User of the transfer cache disk(s).  Users will be allocated space on a CacheDisk
     depending on which CacheDisk has free space.
@@ -173,7 +170,6 @@ class User(models.Model):
         return qs
 
 
-@python_2_unicode_compatible
 class UserLock(models.Model):
     """Entry to lock a user's cache directory.  This allows multiple instances of the management
     scripts to run without any errors due to the scripts acting on the same directory when (for
@@ -184,7 +180,6 @@ class UserLock(models.Model):
     user_lock = models.ForeignKey(User, blank=True, help_text="User that is locked", on_delete=models.CASCADE)
 
 
-@python_2_unicode_compatible
 class CachedFile(models.Model):
     """Description of a cached file.  These files are added by the xfc_scan.py Daemon.
 
@@ -221,7 +216,6 @@ class CachedFile(models.Model):
         return use
 
 
-@python_2_unicode_compatible
 class ScheduledDeletion(models.Model):
     """Description of the deletion of a file which will take place in the future.
     The date the deletion was entered into the schedule is kept so that the user can touch the files, whereupon
