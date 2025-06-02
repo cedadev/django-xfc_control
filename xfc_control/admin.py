@@ -46,6 +46,6 @@ class ScheduledDeletionAdmin(admin.ModelAdmin):
     save_on_top = True
     list_display = ('user', 'time_entered', 'time_delete')
     search_fields = ('user',)
-    fields = ('user', 'time_entered', 'time_delete', 'delete_files')
-    readonly_fields = ('user', 'time_entered', 'delete_files')
+    fields = ('user', 'time_entered', 'time_delete')
+    readonly_fields = ('user', 'time_entered')
 admin.site.register(ScheduledDeletion, ScheduledDeletionAdmin)
