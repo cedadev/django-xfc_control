@@ -35,12 +35,15 @@ We can reinstate the users by looking at the directories under `/work/xfc/vol*`
 The plan
 --------
 
-The generak plan is to decouple the scan from the Django framework, and to reduce its footprint
+The general plan is to decouple the scan from the Django framework, and to reduce its footprint
 
 * Don't store files in the database
 * Don't delete files (at least at the moment) - turn it into a notification service
 * Rewrite the scanner to work on a single user's work directory at once, as a command line program
-  * Use the meta-data from the file, via `stat` in Python, to calculate the temporal quota, as well as the hard quota
+  * `django-xfc_control/xfc_control/scripts/xfc_scan.py`
+  * Convert to command-line script taking a directory and scanning below that.  Use `click` for the command line interface.
+    * See `nlds-client` in `cedadev` github for a complicated example of `click`.  Other simpler examples might be in the `cedadev` github
+  * Use the meta-data from the file, via `stat` in Python, to calculate the temporal quota (sum_of(time file is present * file size)), as well as the hard quota (sum_of(file size))
   * Picks up a message from a RabbitMQ queue
   * Publishes a message on completion
   * Eventually containerise this so it runs on Kubernetes, but to start with we can just run on xfc2
@@ -56,3 +59,11 @@ The generak plan is to decouple the scan from the Django framework, and to reduc
   * Sends notification email to user if they are over quota
 
 Development can take place on your laptop.  I'd suggest using Docker desktop to create a Postgres database and set Django `settings.py` to use this.
+
+Tasks
+-----
+
+0. Neil create Matteo an admin account on `xfc2.jasmin.ac.uk/admin`
+1. Add all the mountpoints (`/work/xfc/vol?`) back into the database at `xfc2.jasmin.ac.uk/admin/xfc_control/cachedisk/`
+2. `xfc init <your username>`
+3. Add all the users back into database with their correct mount points, and a standard quota of 300TB (temporal), 40TB (hard)
