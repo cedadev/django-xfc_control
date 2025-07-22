@@ -13,3 +13,4 @@ pyparsing==3.2.3
 pytz==2025.2
 six==1.17.0
 sqlparse==0.5.3
+click==8.1.7
