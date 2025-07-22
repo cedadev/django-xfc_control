@@ -23,6 +23,12 @@ def run(*args):
         mountpoint = os.path.join(path, os.listdir(path)[0]) # so create path /pathto/work/xfc/vol#/user_cache/
         userdirs = os.listdir(mountpoint)
 
+        cache_disk = CacheDisk()
+        cache_disk.mountpoint = os.path.join('/work/xfc/', vol)
+        cache_disk.allocated_bytes = 40*1024*1024*1024*1024 #40TB allocated
+        # need to save cache_disk before saving user
+        cache_disk.save()
+
         for userdir in userdirs:
 
             logging.info(userdir)
@@ -32,13 +38,6 @@ def run(*args):
             user.notify = True
             user.quota_size = user.get_quota_size()
             user.hard_limit_size = user.get_hard_limit_size()
-            
-            
-            cache_disk = CacheDisk()
-            cache_disk.mountpoint = os.path.join('/work/xfc/', vol)
-            cache_disk.allocated_bytes = user.hard_limit_size
-            # need to save cache_disk before saving user
-            cache_disk.save()
 
             user.cache_path = os.path.join('user_cache', userdir)
             user.cache_disk = cache_disk
