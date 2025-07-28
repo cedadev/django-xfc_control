@@ -84,3 +84,4 @@ All the tasks outlined in the update plan have been completed, and have been tes
     * To run the program, locally each script can be run with `python manage.py runscript <scriptname>` in the order above.
     * There are comments on each file about error handling - how to improve
     * This (I assume) needs to be reconfigured to run automatically - not using `runscript`
+    * The connection hostname for each of the scripts is the name of a local rabbitmq docker container, configured in a `docker-compose` file. This would need to be changed for deployment
