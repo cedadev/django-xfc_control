@@ -34,6 +34,7 @@ def run(*args):
             logging.info(userdir)
             user = User()
             user.name = userdir
+            user.email = 'matteo.guarnaccia@stfc.ac.uk'
             # user.email # TODO where is email specified?
             user.notify = True
             user.quota_size = user.get_quota_size()
