@@ -1,253 +1,140 @@
-"""Function to scan all the files in all user's directories and add them as
-entries to CachedFile.
+"""Function to scan all the files in all user's directories to calculate quota usage.
 
- This script is designed to be run via the django-extensions runscript command:
+ This script is designed to be run from the command line
 
-  ``python manage.py runscript xfc_scan``
+  ``python xfc_scan.py --path /userdir``
 """
 
+# this needs to pick up a message - and then produce one. so it is a producerconsumer
+
+# sends it to an external consumer. - which will notif user or something ??
+
 import datetime
-import calendar
 import os
+import click
+import pika
+import json
 import logging
-from time import sleep
-import signal, sys
+import sys
 
-from xfc_control.models import User, CachedFile
-from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
-import xfc_site.settings as settings
-
-from xfc_control.scripts.config import read_process_config, split_args
-from xfc_control.scripts.config import get_logging_format, get_logging_level
-
-def get_log_time_string():
-    current_time = datetime.datetime.utcnow()
-    current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-        current_time.day, calendar.month_abbr[current_time.month],
-        current_time.year, current_time.hour,
-        current_time.minute, current_time.second)
-    return current_time_string
-
-def scan_for_added_files(user):
-    """Scan the user directory and add the files as CachedFile objects.
-       :var xfc_control.models.User user: instance of User to scan
-    """
-    logging.info("    Scanning for added files")
-    # get the user directory
-    user_dir = os.path.join(user.cache_disk.mountpoint, user.cache_path)
-    # walk the directory
-    user_file_list = os.walk(user_dir, followlinks=True)
-    for root, dirs, files in user_file_list:
-        # if the files is not an empty list then add the files to the user's files
-        if len(files) != 0:
-            for file in files:
-                # get the current time
-                current_time_string = get_log_time_string()
-                filepath = os.path.join(root, file)
-                # get the file info and the current time / date
-                try:
-                    filesize = os.path.getsize(filepath)
-                except os.error:
-                    logging.error(
-                        "[" + current_time_string + "] Could not find file with path: " + filepath
-                    )
-                    continue
-                try:
-                    # create the short filepath, that does not include the cache disk mountpoint
-                    # ensure trailing slash
-                    mp = user.cache_disk.mountpoint
-                    if mp[-1] != "/":
-                        mp += "/"
-                    sh_filepath = filepath.replace(mp,"")
-                    # check whether this file already exists
-                    current_file = CachedFile.objects.filter(
-                        user=user, path=sh_filepath
-                    )
-                    if len(current_file) == 0:
-                        logging.info(
-                            "[" + current_time_string + "] Adding file: " + filepath
-                        )
-                        # create the CachedFile
-                        cf = CachedFile()
-                        cf.user = user
-                        cf.cache_disk = user.cache_disk
-                        cf.path = sh_filepath
-                        cf.size = filesize
-                        cf.first_seen = datetime.datetime.utcnow()
-                        cf.save()
-                    elif current_file[0].size != filesize:
-                        # check whether this file's size has changed
-                        logging.info(
-                            "[" + current_time_string + "] File size changed: " + filepath
-                        )
-                        current_file[0].size = filesize
-                        current_file[0].save()
-                except:
-                    logging.error(
-                        "[" + current_time_string + "] Could not create CachedFile with path: " + filepath
-                    )
+output_connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
+output_channel = output_connection.channel()
 
 
-def scan_for_deleted_files(user):
-    """Find any files that have been deleted but still exist in the database and
-       remove them from the database.
-       :var xfc_control.models.User user: instance of User to update
-    """
-    # loop over all the files
-    logging.info("    Scanning for deleted files")
-    cached_files = CachedFile.objects.filter(user=user)
-    for file in cached_files:
-
-        current_time = datetime.datetime.utcnow()
-        current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-            current_time.day, calendar.month_abbr[current_time.month],
-            current_time.year, current_time.hour,
-            current_time.minute, current_time.second)
-
-        # get the filepath as the concatenation of the mountpoint and path
-        filepath = os.path.join(user.cache_disk.mountpoint, file.path)
-        # check whether the file exists
-        if not os.path.exists(filepath):
-            logging.info(
-                "[" + current_time_string + "] Deleting file: " + filepath
-            )
-            file.delete()
+output_channel.queue_declare(queue='scanner_output', durable=True)
 
 
-def calc_user_quota(user):
-    """Calculate how much of the user's quota has been used up.
-       The quota is in bytes day - so the algorithm is::
+def publish_quotas(username, hard_quota, temporal_quota):
 
-          nfiles
-          sum(current_date - file(n).date_first_seen)*file(n).size
-          n=0
+    message = {
+        'hard_q': hard_quota,
+        'temp_q': temporal_quota,
+        'username': username
+    }
 
-       :var xfc_control.models.User user: instance of User to update
-    """
-    logging.info("    Calculating user quota")
-    # get all the cached files
-    cached_files = CachedFile.objects.filter(user=user)
-    quota_sum = 0
+    output_channel.basic_publish(
+        exchange='',
+        routing_key='scanner_output',
+        body=json.dumps(message)
+    )
 
-    # calculate used
-    for file in cached_files:
-        # get the time delta in days - add one so that the quota is used on
-        # the first day the file was seen
-        quota_sum += file.quota_use()
-    # update the user and save
-    user.quota_used = quota_sum
-    user.save()
+    # output_connection.close()
 
+def recieve_scan_request():
+    request_connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
+    requests_channel = request_connection.channel()
 
-def calc_user_used_space(user):
-    """Calculate how much space on the cache disk the user has used.
-       This is different to the quota as there is no temporal element to this
-       number
-       :var xfc_control.models.User user: instance of User to calculate
-    """
-    logging.info("    Calculating used space")
-    # get all the cached files
-    cached_files = CachedFile.objects.filter(user=user)
-    sum = 0
+    requests_channel.queue_declare(queue='scanner_request', durable=True)
 
-    # calculate used
-    for file in cached_files:
-        sum += file.size
-    user.total_used = sum
-    user.save()
+    def callback(ch, method, properties, body):
+        msg = json.loads(body)
+        username = msg['username']
+        work_dir = msg['work_dir']
 
+        error = ''
+        if not username:
+            error = 'Username not supplied'
+        elif not work_dir:
+            error = 'Work directory not supplied'
 
-def update_cache_disk_used_space(user, amount):
-    """Update the CacheDisk used quota for the current user
-       :var User user: user whose CacheDisk we are modifying
-       :var amount int: number of bytes (positive or negative) to update b
-    """
-    # get the cache disk
-    cd = user.cache_disk
-    # update the amount and save
-    cd.used_bytes += amount
-    cd.save()
+        if error:
+            logging.error(f"Error: {error}")
+            # TODO let request producer know message was invalid?
+            return
 
-def exit_handler(signal, frame):
-    logging.info("Stopping xfc_scan")
-    sys.exit(0)
-
-def run_loop(config):
-    """Run the main loop"""
-    # loop over all the users
-    for user in User.objects.all():
-        logging.info(
-            "[" + get_log_time_string() + "] Running scan for user: " +
-            user.name
-        )
-
-        # check if user locked
-        if user_locked(user):
-            logging.info(
-                "[" + get_log_time_string() + "] User already locked: " + user.name
-            )
-            continue
-        # lock the user
-        lock_user(user)
+        logging.info(f"[X] Scanning work directory for {username}")
+        
         try:
-            # get the current user quota
-            old_user_used_space = user.total_used
-            # scan the directories
-            scan_for_added_files(user)
-            # check for any files that have been deleted and remove them from the database
-            scan_for_deleted_files(user)
-            # calculate the user used_quota
-            calc_user_quota(user)
-            # calculate the total space used
-            calc_user_used_space(user)
-            # adjust the used space in the cache_disk
-            update_cache_disk_used_space(user, user.total_used-old_user_used_space)
-            # unlock the user
-            unlock_user(user)
+            perform_scan(work_dir, username)
         except Exception as e:
-            unlock_user(user)
-            raise Exception(e)
+            logging.error(f"Error: {e}")
+            # TODO let request producer know there was an error?
+            return
+        ch.basic_ack(delivery_tag = method.delivery_tag)
+    
+    requests_channel.basic_qos(prefetch_count=1)
+    requests_channel.basic_consume(
+        queue='scanner_request',
+        on_message_callback=callback
+    )
 
+    logging.info(' [*] Waiting for messages. CTRL+C to exit')
+    requests_channel.start_consuming()
+
+
+@click.command()
+@click.option('--path', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
+@click.option('--username', type=click.STRING)
+def scan_directory(path, username):
+    perform_scan(path, username)
+    
+
+def perform_scan(work_dir, username):
+    """
+    Scans all the files under a specific directoy and calculates:
+        - Hard Quota - total size of all files.
+        - Temporal Quota - sum of (file size * time present)
+
+    params:
+        work_dir: The directory path specified by the user in the command line.
+    """
+
+    # works in this local context. I assume the path needs to change for actual deployment
+    dir = os.path.join('/app/xfc_control/test_xfc/', work_dir)
+    user_file_list = os.walk(dir, followlinks=True)
+
+    now = datetime.datetime.now()
+    hard_quota = 0
+    temporal_quota = 0
+
+    for root, dirs, files in user_file_list:
+        for file in files:
+            try:
+                filepath = os.path.join(root, file)
+                stat = os.stat(filepath)
+                size = stat.st_size
+                created_time = datetime.datetime.fromtimestamp(stat.st_mtime) # use mtime as ctime returns diff values on different os
+                days_present = (now - created_time).days + 1
+
+                hard_quota += size
+                temporal_quota += (size * days_present)
+            except Exception as e:
+                click.echo(f"Error processing {filepath}: {e}", err=True)
+        
+    
+    logging.info(f"Hard Quota (bytes): {hard_quota}")
+    logging.info(f"Temporal Quota (bytes): {temporal_quota}")
+    publish_quotas(username=username, hard_quota=hard_quota, temporal_quota=temporal_quota)
+
+    
 def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
     """
-    # setup the logging
-    config = read_process_config("xfc_scan")
-    logging.basicConfig(
-        format=get_logging_format(),
-        level=get_logging_level(config["LOG_LEVEL"]),
-        datefmt='%Y-%d-%m %I:%M:%S'
-    )
-    logging.info("Starting xfc_scan")
-
-    # setup exit signal handling
-    signal.signal(signal.SIGINT, exit_handler)
-    signal.signal(signal.SIGHUP, exit_handler)
-    signal.signal(signal.SIGTERM, exit_handler)
-
-    # decide whether to run as a daemon
-    arg_dict = split_args(args)
-    if "daemon" in arg_dict:
-        if arg_dict["daemon"].lower() == "true":
-            daemon = True
-        else:
-            daemon = False
-    else:
-        daemon = False
-
-    # run as a daemon or one shot
-    if daemon:
-        # loop this indefinitely until the exit signals are triggered
-        # RUN_EVERY_HOURS determines the period that the scan should run
-        time_period = datetime.timedelta(hours=config["RUN_EVERY_HOURS"])
-        # set previous time to current time minus the RUN_EVERY_HOURS to force
-        # an initial run
-        previous_time = datetime.datetime.utcnow() - time_period
-        while True:
-            current_time = datetime.datetime.utcnow()
-            if (current_time - previous_time) > time_period:
-                run_loop(config)
-                previous_time = current_time
-                sleep(5)
-    else:
-        run_loop(config)
+    try:
+        recieve_scan_request()
+    except KeyboardInterrupt:
+        logging.info('Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)

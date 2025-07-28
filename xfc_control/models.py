@@ -135,6 +135,7 @@ class User(models.Model):
 
     cache_path = models.CharField(max_length=2024, help_text="Relative path to cache area")
     cache_disk = models.ForeignKey(CacheDisk, help_text="Cache disk allocated to the user", on_delete=models.CASCADE)
+    last_scanned = models.DateTimeField(default=datetime.datetime(1900, 1, 1), help_text="The last time the user's work directory was scanned")
 
     def __str__(self):
         return "%s (%s / %s)" % (self.name, filesizeformat(self.quota_used), filesizeformat(self.quota_size))

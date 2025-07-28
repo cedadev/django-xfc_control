@@ -23,6 +23,8 @@ setup(
         'pytz',
         'six',
         'jasmin-ldap @ git+https://github.com/cedadev/jasmin-ldap.git@v1.0.2#egg=jasmin-ldap',
+        'click',
+        'pika'
     ],
     include_package_data=True,
     license='my License',  # example license
