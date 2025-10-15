@@ -70,7 +70,7 @@ All the tasks outlined in the update plan have been completed, and have been tes
 - User's can be added back into the database with `xfc_user_creation.py` - can be run via runscript
 
   - this will also add the mountpoints (`/work/xfc/vol#`) back into the cachedisk database.
-  - the `base_path` variable would need to be changed appropiatley for non-local running of the script
+  - the `base_path` variable would need to be changed appropriately for non-local running of the script
 
 - `last_scanned` datetime field added to database. This can be done on deployment by running (in order): - `python manage.py makemigrations` - `python manage.py migrate` \* This will default create a column with the date 1/1/1900
 

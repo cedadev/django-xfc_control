@@ -40,7 +40,7 @@ def publish_quotas(username, hard_quota, temporal_quota):
 
     # output_connection.close()
 
-def recieve_scan_request():
+def receive_scan_request():
     request_connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
     requests_channel = request_connection.channel()
 
@@ -131,7 +131,7 @@ def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
     """
     try:
-        recieve_scan_request()
+        receive_scan_request()
     except KeyboardInterrupt:
         logging.info('Interrupted')
         try:
