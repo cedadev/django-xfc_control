@@ -13,9 +13,7 @@ User = get_user_model()
 
 # Create your tests here.
 """
-Test:
-the scan (unit test, no django)
-adding the results to the database (integration test, likely needs to be mocked)
+python manage.py test
 """
 
 
