@@ -10,6 +10,7 @@
 # sends it to an external consumer. - which will notif user or something ??
 
 import datetime
+from django.utils import timezone
 import time
 import os
 import click
@@ -31,95 +32,95 @@ from xfc_control.models import CachedDirectoryScan
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
+RABBIT_NAME = 'localhost'
+QUEUE_NAME = "scanner_request"
+
 output_channel = None
 
-def get_output_channel():
-    global output_channel
-    if output_channel is None:
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters('rabbitmq')
-        )
-        output_channel = connection.channel()
-        output_channel.queue_declare(queue='scanner_output', durable=True)
-    return output_channel
-
-
-def publish_quotas(username, hard_quota, temporal_quota):
-    try:
-        channel = get_output_channel()
-    except Exception:
-        print("No RabbitMQ — printing instead:")
-        print(username, hard_quota, temporal_quota)
-        return
-
-    message = {
-        'hard_q': hard_quota,
-        'temp_q': temporal_quota,
-        'username': username
-    }
-
-    channel.basic_publish(
-        exchange='',
-        routing_key='scanner_output',
-        body=json.dumps(message)
-    )
-
-    # output_connection.close()
-
+# Rabbit consumer worker
 def receive_scan_request():
-    request_connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
+    request_connection = pika.BlockingConnection(pika.ConnectionParameters(RABBIT_NAME))
     requests_channel = request_connection.channel()
 
-    requests_channel.queue_declare(queue='scanner_request', durable=True)
+    requests_channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
     def callback(ch, method, properties, body):
-        msg = json.loads(body)
-        username = msg['username']
-        work_dir = msg['work_dir']
-
-        error = ''
-        if not username:
-            error = 'Username not supplied'
-        elif not work_dir:
-            error = 'Work directory not supplied'
-
-        if error:
-            logging.error(f"Error: {error}")
-            # TODO let request producer know message was invalid?
-            return
-
-        logging.info(f"[X] Scanning work directory for {username}")
-        
         try:
-            scan_dirs(work_dir, username)
+            msg = json.loads(body)
+            email = msg['email']
+            work_dir = msg['work_dir']
+
+            if not email or not work_dir:
+                raise ValueError("Invalid message: email/work_dir required")
+
+            logging.info(f"[X] Scan requested: {email} -> {work_dir}")
+            
+            scan_directory_logic(work_dir, email)
+            
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
         except Exception as e:
-            logging.error(f"Error: {e}")
-            # TODO let request producer know there was an error?
-            return
-        ch.basic_ack(delivery_tag = method.delivery_tag)
+            logging.error(f"Worker Error: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     
     requests_channel.basic_qos(prefetch_count=1)
     requests_channel.basic_consume(
-        queue='scanner_request',
+        queue=QUEUE_NAME,
         on_message_callback=callback
     )
 
-    logging.info(' [*] Waiting for messages. CTRL+C to exit')
+    logging.info(' [*] Waiting for scan jobs. CTRL+C to exit')
     requests_channel.start_consuming()
 
 
+# Rabbit producer
+def send_scan_request(email, work_dir):
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(RABBIT_NAME)
+    )
+    channel = connection.channel()
+
+    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+
+    message = {
+        "email": email,
+        "work_dir": work_dir,
+    }
+
+    channel.basic_publish(
+        exchange="",
+        routing_key=QUEUE_NAME,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(delivery_mode=2),
+    )
+
+    connection.close()
+
+
+
+# CLI
 @click.command()
 @click.option('--path', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
 @click.option('--email', required=True, help="User email")
 @click.option('--human', '-h', is_flag=True, help="Human readable output")
-def scan_directory(path, email, human):
-    scan_directory_logic(path, email, human)
-    
+@click.option('--rabbit', is_flag=True, help="Send to RabbitMQ instead of running locally")
+def scan_directory(path, email, human, rabbit):
+    if rabbit:
+        send_scan_request(email, path)
+        print("Scan job sent to queue")
+    else:
+        scan_directory_logic(path, email, human)
+
+
+# Scan formatting logic and database
 def scan_directory_logic(path, email, human=False):
     start = time.time()
     results, human_res = scan_dirs(path, max_workers=8, human=human)
     end = time.time()
-    user = User.objects.get(email=email)
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        raise ValueError(f"User not found: {email}")
 
     print(f"Took {end - start:.2f}s")
     print(f"Scanned {len(results)} directories")
@@ -144,8 +145,10 @@ def scan_directory_logic(path, email, human=False):
     ]
 
     CachedDirectoryScan.objects.bulk_create(records)
+    print("Success!")
 
 
+# scan logic
 def format_size(num_bytes):
     units = ["B", "KB", "MB", "GB", "TB", "PB"]
     size = float(num_bytes)
@@ -201,7 +204,7 @@ def process_dir(entry, now):
 
 
 def scan_dirs(base_path, max_workers=8, human=False):
-    now = datetime.datetime.now()
+    now = timezone.now()
 
     # only top-level dirs
     dirs = []
@@ -238,7 +241,7 @@ def scan_dirs(base_path, max_workers=8, human=False):
     return results, human_res
 
 
-# TODO: integrate with rabbits
+# TODO: write rabbit tests
 
 
 
@@ -248,18 +251,7 @@ def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
     """
     try:
-        #receive_scan_request()
-        if len(args) < 2:
-            raise ValueError("Usage: <path> <email> [human]")
-
-        path = args[0]
-        email = args[1]
-        human = False
-
-        if len(args) > 2:
-            human = args[2].lower() in ("true", "1", "yes", "y")
-
-        scan_directory_logic(path, email, human)
+        receive_scan_request()
     except KeyboardInterrupt:
         logging.info('Interrupted')
         try:
