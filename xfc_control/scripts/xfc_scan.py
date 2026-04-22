@@ -190,7 +190,7 @@ def process_dir(entry, now):
         size = get_dir_size(entry.path)
 
         return {
-            "dir_name": entry.name,
+            "dir_name": entry.path,
             "scan_time": now,
             "dir_mtime": datetime.datetime.fromtimestamp(stat.st_mtime),
             "size": size
