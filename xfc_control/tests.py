@@ -5,8 +5,14 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 import tempfile
 import os
-from xfc_control.scripts.xfc_scan import scan_dirs, scan_directory_logic
+from xfc_control.scripts.xfc_scan import scan_dirs, scan_directory_logic, scan_directory, send_scan_request, handle_message
 from xfc_control.models import CachedDirectoryScan
+from click.testing import CliRunner
+from unittest.mock import patch
+import pika
+import json
+import time
+from unittest.mock import MagicMock
 
 User = get_user_model()
 
@@ -14,10 +20,12 @@ User = get_user_model()
 # Create your tests here.
 """
 python manage.py test
+
+docker containing rabbits is required for integration tests
 """
 
 
-class TestScanner(TestCase):
+class TestScannerFunctionality(TestCase):
 
     def test_scan_single_directory(self):
         """Test that scanning inside a single directory ignores files instead of directories"""
@@ -98,9 +106,15 @@ class TestScanner(TestCase):
 
             self.assertEqual(result_map[sub1]["size"], 16)
             self.assertEqual(result_map[sub2]["size"], 5)
+    
+    def test_scan_nonexistant_directory(self):
+        """Test scanning a directory that doesn't exist"""
+        with self.assertRaises(FileNotFoundError):
+            results, _ = scan_dirs("/path/that/doesnt/exist/8764ertyfgut76rtf6t7ujhyf", max_workers=1)
+        
             
 
-class TestScanIntegration(TestCase):
+class TestScanDatabase(TestCase):
 
     def test_scan_creates_db_entries(self):
         """Test that scanning a directory creates the expected database entries"""
@@ -161,3 +175,107 @@ class TestScanIntegration(TestCase):
 
             for scan in scans:
                 self.assertEqual(scan.user, user)
+    
+    def test_scan_wrong_email(self):
+        user = User.objects.create(email="test@example.com")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # subdir1
+            sub1 = os.path.join(tmp, "subdir1")
+            os.mkdir(sub1)
+            
+            with open(os.path.join(sub1, "file.txt"), "w") as f:
+                f.write("hello")  # 5
+            
+            with self.assertRaises(ValueError):
+                scan_directory_logic(tmp, "fake.email@example.com")
+
+
+# TODO: This
+class TestScannerIntegration(TestCase):
+    """
+    Integration tests are different to unit tests
+    https://www.testrail.com/blog/unit-testing-vs-integration-testing/
+    
+    Require the user to docker with rabbits on (or the test will fail)
+    """
+
+    def test_cli_rabbit_flag(self):
+        runner = CliRunner()
+
+        result = runner.invoke(scan_directory, [
+            "--path", "/tmp",
+            "--email", "test@example.com",
+            "--rabbit"
+        ])
+
+        assert result.exit_code == 0
+        assert "Scan job sent to queue" in result.output
+        
+    @patch("xfc_control.scripts.xfc_scan.pika.BlockingConnection")
+    def test_send_no_connection(self, mock_conn):
+        mock_conn.side_effect = Exception("Connection failed")
+
+        with self.assertRaises(Exception):
+            send_scan_request("a", "b")
+    
+    def test_producer_success(self):
+        send_scan_request("test@example.com", "/tmp")
+
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters("localhost")
+        )
+        channel = connection.channel()
+        channel.queue_declare(queue="scanner_request", durable=True)
+
+        method, _, body = None, None, None
+
+        for _ in range(5):
+            method, _, body = channel.basic_get(queue="scanner_request")
+            if method:
+                break
+            time.sleep(0.2)
+
+        self.assertIsNotNone(method)
+
+        msg = json.loads(body)
+        self.assertEqual(msg["email"], "test@example.com")
+        self.assertEqual(msg["work_dir"], "/tmp")
+
+        channel.basic_ack(method.delivery_tag)
+        connection.close()
+
+    def test_consumer_success(self):
+        user = User.objects.create(email="test@example.com")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = os.path.join(tmp, "subdir")
+            os.mkdir(sub)
+
+            with open(os.path.join(sub, "file.txt"), "w") as f:
+                f.write("hello")
+
+            body = json.dumps({
+                "email": user.email,
+                "work_dir": tmp
+            })
+
+            mock_channel = MagicMock()
+            mock_method = MagicMock()
+            mock_method.delivery_tag = 123
+
+            handle_message(mock_channel, mock_method, body)
+
+            mock_channel.basic_ack.assert_called_once()
+            self.assertEqual(CachedDirectoryScan.objects.count(), 1)
+    
+    def test_consumer_missing_email(self):
+        body = json.dumps({"work_dir": "/tmp"})
+
+        mock_channel = MagicMock()
+        mock_method = MagicMock()
+        mock_method.delivery_tag = 1
+
+        handle_message(mock_channel, mock_method, body)
+
+        mock_channel.basic_nack.assert_called_once()

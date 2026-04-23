@@ -37,6 +37,25 @@ QUEUE_NAME = "scanner_request"
 
 output_channel = None
 
+def handle_message(ch, method, body):
+    try:
+        msg = json.loads(body)
+        email = msg['email']
+        work_dir = msg['work_dir']
+
+        if not email or not work_dir:
+            raise ValueError("Invalid message: email/work_dir required")
+
+        logging.info(f"[X] Scan requested: {email} -> {work_dir}")
+        
+        scan_directory_logic(work_dir, email)
+        
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    except Exception as e:
+        logging.error(f"Worker Error: {e}")
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
 # Rabbit consumer worker
 def receive_scan_request():
     request_connection = pika.BlockingConnection(pika.ConnectionParameters(RABBIT_NAME))
@@ -45,23 +64,7 @@ def receive_scan_request():
     requests_channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
     def callback(ch, method, properties, body):
-        try:
-            msg = json.loads(body)
-            email = msg['email']
-            work_dir = msg['work_dir']
-
-            if not email or not work_dir:
-                raise ValueError("Invalid message: email/work_dir required")
-
-            logging.info(f"[X] Scan requested: {email} -> {work_dir}")
-            
-            scan_directory_logic(work_dir, email)
-            
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        except Exception as e:
-            logging.error(f"Worker Error: {e}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        handle_message(ch, method, body)
     
     requests_channel.basic_qos(prefetch_count=1)
     requests_channel.basic_consume(
@@ -239,12 +242,6 @@ def scan_dirs(base_path, max_workers=8, human=False):
             })
 
     return results, human_res
-
-
-# TODO: write rabbit tests
-
-
-
 
     
 def run(*args):
