@@ -18,6 +18,7 @@ import pika
 import json
 import logging
 import sys
+import logging
 
 
 import django
@@ -53,7 +54,7 @@ def handle_message(ch, method, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     except Exception as e:
-        logging.error(f"Worker Error: {e}")
+        logging.exception("Worker Error")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 # Rabbit consumer worker
@@ -108,9 +109,11 @@ def send_scan_request(email, work_dir):
 @click.option('--human', '-h', is_flag=True, help="Human readable output")
 @click.option('--rabbit', is_flag=True, help="Send to RabbitMQ instead of running locally")
 def scan_directory(path, email, human, rabbit):
+    path = os.path.abspath(path)
+
     if rabbit:
         send_scan_request(email, path)
-        print("Scan job sent to queue")
+        logging.info("Scan job sent to queue")
     else:
         scan_directory_logic(path, email, human)
 
@@ -125,17 +128,17 @@ def scan_directory_logic(path, email, human=False):
     except User.DoesNotExist:
         raise ValueError(f"User not found: {email}")
 
-    print(f"Took {end - start:.2f}s")
-    print(f"Scanned {len(results)} directories")
-    print("Results:")
+    logging.info(f"Took {end - start:.2f}s")
+    logging.info(f"Scanned {len(results)} directories")
+    logging.info("Results:")
     if human_res:
         for r in human_res:
-            print(r)
+            logging.info(r)
     else:
         for r in results:
-            print(r)
-    print("")
-    print("Adding to database")
+            logging.info(r)
+    logging.info("")
+    logging.info("Adding to database")
     records = [
         CachedDirectoryScan(
             user=user,
@@ -148,7 +151,7 @@ def scan_directory_logic(path, email, human=False):
     ]
 
     CachedDirectoryScan.objects.bulk_create(records)
-    print("Success!")
+    logging.info("Success!")
 
 
 # scan logic

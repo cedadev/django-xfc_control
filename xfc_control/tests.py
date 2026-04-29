@@ -191,7 +191,6 @@ class TestScanDatabase(TestCase):
                 scan_directory_logic(tmp, "fake.email@example.com")
 
 
-# TODO: This
 class TestScannerIntegration(TestCase):
     """
     Integration tests are different to unit tests
@@ -210,7 +209,6 @@ class TestScannerIntegration(TestCase):
         ])
 
         assert result.exit_code == 0
-        assert "Scan job sent to queue" in result.output
         
     @patch("xfc_control.scripts.xfc_scan.pika.BlockingConnection")
     def test_send_no_connection(self, mock_conn):
