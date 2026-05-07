@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from django.db import models
+from django.conf import settings as django_settings
 
 from sizefield.models import FileSizeField
 from sizefield.utils import filesizeformat
@@ -216,6 +217,22 @@ class CachedFile(models.Model):
         use = self.size * days_persistent
         return use
 
+class CachedDirectoryScan(models.Model):
+    user = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="directory_scans"
+    )
+
+    dir_name = models.TextField()
+    scan_time = models.DateTimeField()
+    dir_mtime = models.DateTimeField()
+    size_bytes = models.BigIntegerField()
+
+    scan_id = models.CharField(max_length=64, db_index=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.dir_name} ({self.size_bytes} bytes)"
 
 class ScheduledDeletion(models.Model):
     """Description of the deletion of a file which will take place in the future.

@@ -544,7 +544,7 @@ class CacheDiskView(View):
         """
         # first case - get all disks
         disks = []
-        error_data = data
+        error_data = {}
         if len(request.GET) == 0:
             for disk in CacheDisk.objects.all():
                 disk_data = {"id": disk.pk,
