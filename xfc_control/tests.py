@@ -255,7 +255,8 @@ class TestScannerIntegration(TestCase):
 
             body = json.dumps({
                 "email": user.email,
-                "work_dir": tmp
+                "work_dir": tmp,
+                "method": "default"
             })
 
             mock_channel = MagicMock()

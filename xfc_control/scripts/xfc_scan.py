@@ -32,32 +32,32 @@ from concurrent.futures import ThreadPoolExecutor
 from xfc_control.models import CachedDirectoryScan
 from django.contrib.auth import get_user_model
 User = get_user_model()
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 RABBIT_NAME = 'localhost'
 QUEUE_NAME = "scanner_request"
 
 output_channel = None
 
-def handle_message(ch, method, body):
+def handle_message(ch, delivery, body):
     try:
         msg = json.loads(body)
         email = msg['email']
         work_dir = msg['work_dir']
-        method = msg['method']
+        scan_method = msg['method']
 
         if not email or not work_dir:
             raise ValueError("Invalid message: email/work_dir required")
 
         logging.info(f"[X] Scan requested: {email} -> {work_dir}")
         
-        scan_directory_logic(work_dir, email, method)
+        scan_directory_logic(work_dir, email, scan_method)
         
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        ch.basic_ack(delivery_tag=delivery.delivery_tag)
 
     except Exception as e:
         logging.exception("Worker Error")
-        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        ch.basic_nack(delivery_tag=delivery.delivery_tag, requeue=False)
 
 # Rabbit consumer worker
 def receive_scan_request():
