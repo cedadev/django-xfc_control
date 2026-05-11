@@ -206,12 +206,12 @@ def determine_best_method(path, method):
         if method == "pdu":
             checks.extend([
                 ("pdu", "-sb"),
-                ("pdu", "-s"),
+                ("pdu", "-sk"),
             ])
 
         checks.extend([
             ("du", "-sb"),
-            ("du", "-s"),
+            ("du", "-sk"),
         ])
 
         for command, flag in checks:
@@ -230,35 +230,70 @@ def determine_best_method(path, method):
     return "default", ""
         
 
-def shell_method_scan(path, method, params):
-    logging.info(f"running {method} with parameters {params} for: {path}")
-    cmd = [method, params, path]
+def shell_method_scan_all(dirs, now, method, params):
+    paths = [d.path for d in dirs]
+
+    if not paths:
+        return []
+
+    logging.info(
+        f"running {method} with parameters {params} for {len(paths)} directories"
+    )
+
+    cmd = [method, params] + paths
+
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=True
     )
-    
-    # Convert the byte block size to bytes (default is *512)
-    block_count = int(result.stdout.split()[0])
-    if params == "-s":
-        return block_count * 512
-    return block_count
 
-def process_dir(entry, now, method):
+    results = []
+
+    size_map = {}
+
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=1)
+
+        if len(parts) != 2:
+            continue
+
+        raw_size, path = parts
+
+        size = int(raw_size)
+
+        # convert -sk to bytes
+        if params == "-sk":
+            size *= 1024
+
+        size_map[path] = size
+
+    for entry in dirs:
+        if entry.path not in size_map:
+            logging.warning(f"No size found for {entry.path} in {method} output")
+        try:
+            stat = entry.stat()
+
+            results.append({
+                "dir_name": entry.path,
+                "scan_time": now,
+                "dir_mtime": datetime.datetime.fromtimestamp(
+                    stat.st_mtime
+                ),
+                "size": size_map.get(entry.path, 0)
+            })
+
+        except Exception as e:
+            logging.error(f"Error processing {entry.path}: {e}")
+
+    return results
+
+def process_dir(entry, now):
     try:
         stat = entry.stat()
         path = entry.path
-        size = 0
-        
-        method, params = determine_best_method(path, method)
-        
-        if method in ["du", "pdu"]:
-            size = shell_method_scan(path, method, params)
-        else:
-            # default
-            size = get_dir_size(path)
+        size = get_dir_size(path)
 
         return {
             "dir_name": path,
@@ -283,18 +318,27 @@ def scan_dirs(base_path, method, max_workers=8, human=False):
                 dirs.append(entry)
 
     results = []
+    method, params = determine_best_method(base_path, method)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
+    if method != "default":
+        results = shell_method_scan_all(
+            dirs,
+            now,
+            method,
+            params
+        )
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
 
-        for d in dirs:
-            future = executor.submit(process_dir, d, now, method)
-            futures.append(future)
+            for d in dirs:
+                future = executor.submit(process_dir, d, now)
+                futures.append(future)
 
-        for f in futures:
-            res = f.result()
-            if res:
-                results.append(res)
+            for f in futures:
+                res = f.result()
+                if res:
+                    results.append(res)
     
     human_res = []
     if human:

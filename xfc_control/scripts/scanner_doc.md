@@ -67,3 +67,25 @@ python xfc_control/scripts/xfc_scan.py \
 ```
 
 the only difference being the lack of --rabbit
+
+
+### CLI options
+```
+Options:
+  --path DIRECTORY
+  --email TEXT      User email  [required]
+  -h, --human       Human readable output
+  --rabbit          Send to RabbitMQ instead of running locally
+  --du
+  --pdu
+  --default
+  --help            Show this message and exit.
+```
+
+selecting the du, pdu or default flag only selects the latest one in the line (so doing -du -pdu it would only use pdu)
+These three flags determin the method of scanning
+```
+du takes ~330 seconds
+python takes ~20 seconds
+pdu takes ~10-15 seconds
+```
