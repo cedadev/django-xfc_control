@@ -18,7 +18,7 @@ import pika
 import json
 import logging
 import sys
-import logging
+import subprocess
 
 
 import django
@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 from xfc_control.models import CachedDirectoryScan
 from django.contrib.auth import get_user_model
 User = get_user_model()
+logging.basicConfig(level=logging.DEBUG)
 
 RABBIT_NAME = 'localhost'
 QUEUE_NAME = "scanner_request"
@@ -43,13 +44,14 @@ def handle_message(ch, method, body):
         msg = json.loads(body)
         email = msg['email']
         work_dir = msg['work_dir']
+        method = msg['method']
 
         if not email or not work_dir:
             raise ValueError("Invalid message: email/work_dir required")
 
         logging.info(f"[X] Scan requested: {email} -> {work_dir}")
         
-        scan_directory_logic(work_dir, email)
+        scan_directory_logic(work_dir, email, method)
         
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -78,7 +80,7 @@ def receive_scan_request():
 
 
 # Rabbit producer
-def send_scan_request(email, work_dir):
+def send_scan_request(email, work_dir, method):
     connection = pika.BlockingConnection(
         pika.ConnectionParameters(RABBIT_NAME)
     )
@@ -89,6 +91,7 @@ def send_scan_request(email, work_dir):
     message = {
         "email": email,
         "work_dir": work_dir,
+        "method": method,
     }
 
     channel.basic_publish(
@@ -108,20 +111,23 @@ def send_scan_request(email, work_dir):
 @click.option('--email', required=True, help="User email")
 @click.option('--human', '-h', is_flag=True, help="Human readable output")
 @click.option('--rabbit', is_flag=True, help="Send to RabbitMQ instead of running locally")
-def scan_directory(path, email, human, rabbit):
+@click.option('--du', 'method', flag_value='du')
+@click.option('--pdu', 'method', flag_value='pdu')
+@click.option('--default', 'method', flag_value='default', default=True)
+def scan_directory(path, email, human, rabbit, method):
     path = os.path.abspath(path)
 
     if rabbit:
-        send_scan_request(email, path)
+        send_scan_request(email, path, method)
         logging.info("Scan job sent to queue")
     else:
-        scan_directory_logic(path, email, human)
+        scan_directory_logic(path, email, method, human)
 
 
 # Scan formatting logic and database
-def scan_directory_logic(path, email, human=False):
+def scan_directory_logic(path, email, method, human=False):
     start = time.time()
-    results, human_res = scan_dirs(path, max_workers=8, human=human)
+    results, human_res = scan_dirs(path, method, max_workers=8, human=human)
     end = time.time()
     try:
         user = User.objects.get(email=email)
@@ -193,23 +199,79 @@ def get_dir_size(path):
     return total
 
 
-def process_dir(entry, now):
+def determine_best_method(path, method):
+    if method != "default":
+        checks = []
+
+        if method == "pdu":
+            checks.extend([
+                ("pdu", "-sb"),
+                ("pdu", "-s"),
+            ])
+
+        checks.extend([
+            ("du", "-sb"),
+            ("du", "-s"),
+        ])
+
+        for command, flag in checks:
+            try:
+                subprocess.run(
+                    [command, flag, path],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                return command, flag
+            except Exception:
+                pass
+        logging.error(f"{method} failed, falling back to default")
+
+    return "default", ""
+        
+
+def shell_method_scan(path, method, params):
+    logging.info(f"running {method} with parameters {params} for: {path}")
+    cmd = [method, params, path]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    
+    # Convert the byte block size to bytes (default is *512)
+    block_count = int(result.stdout.split()[0])
+    if params == "-s":
+        return block_count * 512
+    return block_count
+
+def process_dir(entry, now, method):
     try:
         stat = entry.stat()
-        size = get_dir_size(entry.path)
+        path = entry.path
+        size = 0
+        
+        method, params = determine_best_method(path, method)
+        
+        if method in ["du", "pdu"]:
+            size = shell_method_scan(path, method, params)
+        else:
+            # default
+            size = get_dir_size(path)
 
         return {
-            "dir_name": entry.path,
+            "dir_name": path,
             "scan_time": now,
             "dir_mtime": datetime.datetime.fromtimestamp(stat.st_mtime),
             "size": size
         }
-
-    except Exception:
+    except Exception as e:
+        logging.error(f"Error processing {entry.path}: {e}")
         return None
 
 
-def scan_dirs(base_path, max_workers=8, human=False):
+def scan_dirs(base_path, method, max_workers=8, human=False):
     now = timezone.now()
 
     # only top-level dirs
@@ -226,7 +288,7 @@ def scan_dirs(base_path, max_workers=8, human=False):
         futures = []
 
         for d in dirs:
-            future = executor.submit(process_dir, d, now)
+            future = executor.submit(process_dir, d, now, method)
             futures.append(future)
 
         for f in futures:
