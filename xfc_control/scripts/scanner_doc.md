@@ -89,3 +89,7 @@ du takes ~330 seconds
 python takes ~20 seconds
 pdu takes ~10-15 seconds
 ```
+
+The scanner will now run a quick command to check if pdu or du is on your file system and whether -b works. If pdu is not on your system, it uses du, if du is not on your system, it uses the python version.
+
+if -b does not work then it will use -k and multiply by 1024 which is slightly more inaccurate but it is roughly the same
