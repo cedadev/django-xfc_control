@@ -35,7 +35,7 @@ class TestScannerFunctionality(TestCase):
             with open(file_path, "w") as f:
                 f.write("hello")  # 5 bytes
 
-            results, _ = scan_dirs(tmp, max_workers=1)
+            results, _ = scan_dirs(tmp, "default", max_workers=1)
 
             self.assertEqual(len(results), 0)
     
@@ -63,7 +63,7 @@ class TestScannerFunctionality(TestCase):
             empty = os.path.join(sub, "empty")
             os.mkdir(empty)
 
-            results, _ = scan_dirs(tmp, max_workers=1)
+            results, _ = scan_dirs(tmp, "default", max_workers=1)
 
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0]["size"], 16)
@@ -97,7 +97,7 @@ class TestScannerFunctionality(TestCase):
             with open(os.path.join(sub2, "a.txt"), "w") as f:
                 f.write("what?")  # 5 bytes
 
-            results, _ = scan_dirs(tmp, max_workers=1)
+            results, _ = scan_dirs(tmp, "default", max_workers=1)
 
             self.assertEqual(len(results), 2)
 
@@ -110,7 +110,7 @@ class TestScannerFunctionality(TestCase):
     def test_scan_nonexistant_directory(self):
         """Test scanning a directory that doesn't exist"""
         with self.assertRaises(FileNotFoundError):
-            results, _ = scan_dirs("/path/that/doesnt/exist/8764ertyfgut76rtf6t7ujhyf", max_workers=1)
+            results, _ = scan_dirs("/path/that/doesnt/exist/8764ertyfgut76rtf6t7ujhyf", "default", max_workers=1)
         
             
 
@@ -129,7 +129,7 @@ class TestScanDatabase(TestCase):
             with open(os.path.join(sub, "file2.txt"), "w") as f:
                 f.write("world.")  # 6 bytes
 
-            scan_directory_logic(tmp, user.email)
+            scan_directory_logic(tmp, user.email, "default")
 
             self.assertEqual(CachedDirectoryScan.objects.count(), 1)
 
@@ -162,7 +162,7 @@ class TestScanDatabase(TestCase):
             with open(os.path.join(sub2, "a.txt"), "w") as f:
                 f.write("abc")  # 3
 
-            scan_directory_logic(tmp, user.email)
+            scan_directory_logic(tmp, user.email, "default")
 
             self.assertEqual(CachedDirectoryScan.objects.count(), 2)
 
@@ -188,7 +188,7 @@ class TestScanDatabase(TestCase):
                 f.write("hello")  # 5
             
             with self.assertRaises(ValueError):
-                scan_directory_logic(tmp, "fake.email@example.com")
+                scan_directory_logic(tmp, "fake.email@example.com", "default")
 
 
 class TestScannerIntegration(TestCase):
@@ -215,10 +215,10 @@ class TestScannerIntegration(TestCase):
         mock_conn.side_effect = Exception("Connection failed")
 
         with self.assertRaises(Exception):
-            send_scan_request("a", "b")
+            send_scan_request("a", "b", "default")
     
     def test_producer_success(self):
-        send_scan_request("test@example.com", "/tmp")
+        send_scan_request("test@example.com", "/tmp", "default")
 
         connection = pika.BlockingConnection(
             pika.ConnectionParameters("localhost")
@@ -255,7 +255,8 @@ class TestScannerIntegration(TestCase):
 
             body = json.dumps({
                 "email": user.email,
-                "work_dir": tmp
+                "work_dir": tmp,
+                "method": "default"
             })
 
             mock_channel = MagicMock()
