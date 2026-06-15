@@ -1,253 +1,373 @@
-"""Function to scan all the files in all user's directories and add them as
-entries to CachedFile.
+#! /usr/bin/env python
+"""Function to scan all the files in all user's directories to calculate quota usage.
 
- This script is designed to be run via the django-extensions runscript command:
+ This script is designed to be run from the command line
 
-  ``python manage.py runscript xfc_scan``
+  ``python xfc_control/scripts/xfc_scan.py --path /userdir --email example@example.com -h``
+
+Author: Will Cross
 """
 
+# this needs to pick up a message - and then produce one. so it is a producerconsumer
+
+# sends it to an external consumer. - which will notif user or something ??
+
 import datetime
-import calendar
+from django.utils import timezone
+import time
 import os
+import click
+import pika
+import json
 import logging
-from time import sleep
-import signal, sys
-
-from xfc_control.models import User, CachedFile
-from xfc_control.scripts.xfc_user_lock import lock_user, user_locked, unlock_user
-import xfc_site.settings as settings
-
-from xfc_control.scripts.config import read_process_config, split_args
-from xfc_control.scripts.config import get_logging_format, get_logging_level
-
-def get_log_time_string():
-    current_time = datetime.datetime.utcnow()
-    current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-        current_time.day, calendar.month_abbr[current_time.month],
-        current_time.year, current_time.hour,
-        current_time.minute, current_time.second)
-    return current_time_string
-
-def scan_for_added_files(user):
-    """Scan the user directory and add the files as CachedFile objects.
-       :var xfc_control.models.User user: instance of User to scan
-    """
-    logging.info("    Scanning for added files")
-    # get the user directory
-    user_dir = os.path.join(user.cache_disk.mountpoint, user.cache_path)
-    # walk the directory
-    user_file_list = os.walk(user_dir, followlinks=True)
-    for root, dirs, files in user_file_list:
-        # if the files is not an empty list then add the files to the user's files
-        if len(files) != 0:
-            for file in files:
-                # get the current time
-                current_time_string = get_log_time_string()
-                filepath = os.path.join(root, file)
-                # get the file info and the current time / date
-                try:
-                    filesize = os.path.getsize(filepath)
-                except os.error:
-                    logging.error(
-                        "[" + current_time_string + "] Could not find file with path: " + filepath
-                    )
-                    continue
-                try:
-                    # create the short filepath, that does not include the cache disk mountpoint
-                    # ensure trailing slash
-                    mp = user.cache_disk.mountpoint
-                    if mp[-1] != "/":
-                        mp += "/"
-                    sh_filepath = filepath.replace(mp,"")
-                    # check whether this file already exists
-                    current_file = CachedFile.objects.filter(
-                        user=user, path=sh_filepath
-                    )
-                    if len(current_file) == 0:
-                        logging.info(
-                            "[" + current_time_string + "] Adding file: " + filepath
-                        )
-                        # create the CachedFile
-                        cf = CachedFile()
-                        cf.user = user
-                        cf.cache_disk = user.cache_disk
-                        cf.path = sh_filepath
-                        cf.size = filesize
-                        cf.first_seen = datetime.datetime.utcnow()
-                        cf.save()
-                    elif current_file[0].size != filesize:
-                        # check whether this file's size has changed
-                        logging.info(
-                            "[" + current_time_string + "] File size changed: " + filepath
-                        )
-                        current_file[0].size = filesize
-                        current_file[0].save()
-                except:
-                    logging.error(
-                        "[" + current_time_string + "] Could not create CachedFile with path: " + filepath
-                    )
+import sys
+import subprocess
 
 
-def scan_for_deleted_files(user):
-    """Find any files that have been deleted but still exist in the database and
-       remove them from the database.
-       :var xfc_control.models.User user: instance of User to update
-    """
-    # loop over all the files
-    logging.info("    Scanning for deleted files")
-    cached_files = CachedFile.objects.filter(user=user)
-    for file in cached_files:
+import django
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parents[2]
+sys.path.append(str(BASE_DIR))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "xfc_site.settings")
+django.setup()
 
-        current_time = datetime.datetime.utcnow()
-        current_time_string = "%02i %s %d %02d:%02d.%02d" % (
-            current_time.day, calendar.month_abbr[current_time.month],
-            current_time.year, current_time.hour,
-            current_time.minute, current_time.second)
+from concurrent.futures import ThreadPoolExecutor
+from xfc_control.models import CachedDirectoryScan
+from django.contrib.auth import get_user_model
+User = get_user_model()
+logging.basicConfig(level=logging.DEBUG)
 
-        # get the filepath as the concatenation of the mountpoint and path
-        filepath = os.path.join(user.cache_disk.mountpoint, file.path)
-        # check whether the file exists
-        if not os.path.exists(filepath):
-            logging.info(
-                "[" + current_time_string + "] Deleting file: " + filepath
-            )
-            file.delete()
+RABBIT_NAME = 'localhost'
+QUEUE_NAME = "scanner_request"
 
+output_channel = None
 
-def calc_user_quota(user):
-    """Calculate how much of the user's quota has been used up.
-       The quota is in bytes day - so the algorithm is::
+def handle_message(ch, delivery, body):
+    try:
+        msg = json.loads(body)
+        email = msg['email']
+        work_dir = msg['work_dir']
+        scan_method = msg['method']
 
-          nfiles
-          sum(current_date - file(n).date_first_seen)*file(n).size
-          n=0
+        if not email or not work_dir:
+            raise ValueError("Invalid message: email/work_dir required")
 
-       :var xfc_control.models.User user: instance of User to update
-    """
-    logging.info("    Calculating user quota")
-    # get all the cached files
-    cached_files = CachedFile.objects.filter(user=user)
-    quota_sum = 0
+        logging.info(f"[X] Scan requested: {email} -> {work_dir}")
+        
+        scan_directory_logic(work_dir, email, scan_method)
+        
+        ch.basic_ack(delivery_tag=delivery.delivery_tag)
 
-    # calculate used
-    for file in cached_files:
-        # get the time delta in days - add one so that the quota is used on
-        # the first day the file was seen
-        quota_sum += file.quota_use()
-    # update the user and save
-    user.quota_used = quota_sum
-    user.save()
+    except Exception as e:
+        logging.exception("Worker Error")
+        ch.basic_nack(delivery_tag=delivery.delivery_tag, requeue=False)
 
+# Rabbit consumer worker
+def receive_scan_request():
+    request_connection = pika.BlockingConnection(pika.ConnectionParameters(RABBIT_NAME))
+    requests_channel = request_connection.channel()
 
-def calc_user_used_space(user):
-    """Calculate how much space on the cache disk the user has used.
-       This is different to the quota as there is no temporal element to this
-       number
-       :var xfc_control.models.User user: instance of User to calculate
-    """
-    logging.info("    Calculating used space")
-    # get all the cached files
-    cached_files = CachedFile.objects.filter(user=user)
-    sum = 0
+    requests_channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
-    # calculate used
-    for file in cached_files:
-        sum += file.size
-    user.total_used = sum
-    user.save()
+    def callback(ch, method, properties, body):
+        handle_message(ch, method, body)
+    
+    requests_channel.basic_qos(prefetch_count=1)
+    requests_channel.basic_consume(
+        queue=QUEUE_NAME,
+        on_message_callback=callback
+    )
+
+    logging.info(' [*] Waiting for scan jobs. CTRL+C to exit')
+    requests_channel.start_consuming()
 
 
-def update_cache_disk_used_space(user, amount):
-    """Update the CacheDisk used quota for the current user
-       :var User user: user whose CacheDisk we are modifying
-       :var amount int: number of bytes (positive or negative) to update b
-    """
-    # get the cache disk
-    cd = user.cache_disk
-    # update the amount and save
-    cd.used_bytes += amount
-    cd.save()
+# Rabbit producer
+def send_scan_request(email, work_dir, method):
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(RABBIT_NAME)
+    )
+    channel = connection.channel()
 
-def exit_handler(signal, frame):
-    logging.info("Stopping xfc_scan")
-    sys.exit(0)
+    channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
-def run_loop(config):
-    """Run the main loop"""
-    # loop over all the users
-    for user in User.objects.all():
-        logging.info(
-            "[" + get_log_time_string() + "] Running scan for user: " +
-            user.name
+    message = {
+        "email": email,
+        "work_dir": work_dir,
+        "method": method,
+    }
+
+    channel.basic_publish(
+        exchange="",
+        routing_key=QUEUE_NAME,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(delivery_mode=2),
+    )
+
+    connection.close()
+
+
+
+# CLI
+@click.command()
+@click.option('--path', type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True))
+@click.option('--email', required=True, help="User email")
+@click.option('--human', '-h', is_flag=True, help="Human readable output")
+@click.option('--rabbit', is_flag=True, help="Send to RabbitMQ instead of running locally")
+@click.option('--du', 'method', flag_value='du')
+@click.option('--pdu', 'method', flag_value='pdu')
+@click.option('--default', 'method', flag_value='default', default=True)
+def scan_directory(path, email, human, rabbit, method):
+    path = os.path.abspath(path)
+
+    if rabbit:
+        send_scan_request(email, path, method)
+        logging.info("Scan job sent to queue")
+    else:
+        logging.info("Performing local scan")
+        scan_directory_logic(path, email, method, human)
+
+
+# Scan formatting logic and database
+def scan_directory_logic(path, email, method, human=False):
+    start = time.time()
+    results, human_res = scan_dirs(path, method, max_workers=8, human=human)
+    end = time.time()
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        raise ValueError(f"User not found: {email}")
+
+    logging.info(f"Took {end - start:.2f}s")
+    logging.info(f"Scanned {len(results)} directories")
+    logging.info("Results:")
+    if human_res:
+        for r in human_res:
+            logging.info(r)
+    else:
+        for r in results:
+            logging.info(r)
+    logging.info("")
+    logging.info("Adding to database")
+    records = [
+        CachedDirectoryScan(
+            user=user,
+            dir_name=row["dir_name"],
+            scan_time=row["scan_time"],
+            dir_mtime=row["dir_mtime"],
+            size_bytes=row["size"]
         )
+            for row in results
+    ]
 
-        # check if user locked
-        if user_locked(user):
-            logging.info(
-                "[" + get_log_time_string() + "] User already locked: " + user.name
-            )
-            continue
-        # lock the user
-        lock_user(user)
+    CachedDirectoryScan.objects.bulk_create(records)
+    logging.info("Success!")
+
+
+# scan logic
+def format_size(num_bytes):
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    size = float(num_bytes)
+
+    for unit in units:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+
+    return f"{size:.2f} EB"
+
+
+def format_time(dt):
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_dir_size(path):
+    total = 0
+    stack = [path]
+
+    while stack:
+        current = stack.pop()
         try:
-            # get the current user quota
-            old_user_used_space = user.total_used
-            # scan the directories
-            scan_for_added_files(user)
-            # check for any files that have been deleted and remove them from the database
-            scan_for_deleted_files(user)
-            # calculate the user used_quota
-            calc_user_quota(user)
-            # calculate the total space used
-            calc_user_used_space(user)
-            # adjust the used space in the cache_disk
-            update_cache_disk_used_space(user, user.total_used-old_user_used_space)
-            # unlock the user
-            unlock_user(user)
-        except Exception as e:
-            unlock_user(user)
-            raise Exception(e)
+            with os.scandir(current) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat().st_size
+                        elif entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                    except Exception:
+                        continue
+        except Exception:
+            continue
 
+    return total
+
+
+def determine_best_method(path, method):
+    if method != "default":
+        checks = []
+
+        if method == "pdu":
+            checks.extend([
+                ("pdu", "-sb"),
+                ("pdu", "-sk"),
+            ])
+
+        checks.extend([
+            ("du", "-sb"),
+            ("du", "-sk"),
+        ])
+
+        for command, flag in checks:
+            try:
+                subprocess.run(
+                    [command, flag, path],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                return command, flag
+            except Exception:
+                pass
+        logging.error(f"{method} failed, falling back to default")
+
+    return "default", ""
+        
+
+def shell_method_scan_all(dirs, now, method, params):
+    paths = [d.path for d in dirs]
+
+    if not paths:
+        return []
+
+    logging.info(
+        f"running {method} with parameters {params} for {len(paths)} directories"
+    )
+
+    cmd = [method, params] + paths
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    results = []
+
+    size_map = {}
+
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=1)
+
+        if len(parts) != 2:
+            continue
+
+        raw_size, path = parts
+
+        size = int(raw_size)
+
+        # convert -sk to bytes
+        if params == "-sk":
+            size *= 1024
+
+        size_map[path] = size
+
+    for entry in dirs:
+        if entry.path not in size_map:
+            logging.warning(f"No size found for {entry.path} in {method} output")
+        try:
+            stat = entry.stat()
+
+            results.append({
+                "dir_name": entry.path,
+                "scan_time": now,
+                "dir_mtime": datetime.datetime.fromtimestamp(
+                    stat.st_mtime
+                ),
+                "size": size_map.get(entry.path, 0)
+            })
+
+        except Exception as e:
+            logging.error(f"Error processing {entry.path}: {e}")
+
+    return results
+
+def process_dir(entry, now):
+    try:
+        stat = entry.stat()
+        path = entry.path
+        size = get_dir_size(path)
+
+        return {
+            "dir_name": path,
+            "scan_time": now,
+            "dir_mtime": datetime.datetime.fromtimestamp(stat.st_mtime),
+            "size": size
+        }
+    except Exception as e:
+        logging.error(f"Error processing {entry.path}: {e}")
+        return None
+
+
+def scan_dirs(base_path, method, max_workers=8, human=False):
+    now = timezone.now()
+
+    # only top-level dirs
+    dirs = []
+
+    with os.scandir(base_path) as entries:
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                dirs.append(entry)
+
+    results = []
+    method, params = determine_best_method(base_path, method)
+
+    if method != "default":
+        results = shell_method_scan_all(
+            dirs,
+            now,
+            method,
+            params
+        )
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for d in dirs:
+                future = executor.submit(process_dir, d, now)
+                futures.append(future)
+
+            for f in futures:
+                res = f.result()
+                if res:
+                    results.append(res)
+    
+    human_res = []
+    if human:
+        for r in results:
+            human_res.append({
+                "dir_name": r["dir_name"],
+                "scan_time": format_time(r["scan_time"]),
+                "dir_mtime": format_time(r["dir_mtime"]),
+                "size": format_size(r["size"])
+            })
+
+    return results, human_res
+
+    
 def run(*args):
     """Entry point for the Django script run via ``./manage.py runscript``
     """
-    # setup the logging
-    config = read_process_config("xfc_scan")
-    logging.basicConfig(
-        format=get_logging_format(),
-        level=get_logging_level(config["LOG_LEVEL"]),
-        datefmt='%Y-%d-%m %I:%M:%S'
-    )
-    logging.info("Starting xfc_scan")
+    try:
+        receive_scan_request()
+    except KeyboardInterrupt:
+        logging.info('Interrupted')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
-    # setup exit signal handling
-    signal.signal(signal.SIGINT, exit_handler)
-    signal.signal(signal.SIGHUP, exit_handler)
-    signal.signal(signal.SIGTERM, exit_handler)
-
-    # decide whether to run as a daemon
-    arg_dict = split_args(args)
-    if "daemon" in arg_dict:
-        if arg_dict["daemon"].lower() == "true":
-            daemon = True
-        else:
-            daemon = False
-    else:
-        daemon = False
-
-    # run as a daemon or one shot
-    if daemon:
-        # loop this indefinitely until the exit signals are triggered
-        # RUN_EVERY_HOURS determines the period that the scan should run
-        time_period = datetime.timedelta(hours=config["RUN_EVERY_HOURS"])
-        # set previous time to current time minus the RUN_EVERY_HOURS to force
-        # an initial run
-        previous_time = datetime.datetime.utcnow() - time_period
-        while True:
-            current_time = datetime.datetime.utcnow()
-            if (current_time - previous_time) > time_period:
-                run_loop(config)
-                previous_time = current_time
-                sleep(5)
-    else:
-        run_loop(config)
+if __name__ == "__main__":
+    scan_directory()
