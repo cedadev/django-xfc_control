@@ -4,6 +4,7 @@
     pick up the message, and begin scanning their directory.
 
     Note - this script currently is run manually, this should be looped using cron job.
+Author: Matteo Guarnaccia
 
 '''
 

@@ -1,8 +1,11 @@
+#! /usr/bin/env python
 """Function to scan all the files in all user's directories to calculate quota usage.
 
  This script is designed to be run from the command line
 
   ``python xfc_control/scripts/xfc_scan.py --path /userdir --email example@example.com -h``
+
+Author: Will Cross
 """
 
 # this needs to pick up a message - and then produce one. so it is a producerconsumer
@@ -32,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from xfc_control.models import CachedDirectoryScan
 from django.contrib.auth import get_user_model
 User = get_user_model()
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 RABBIT_NAME = 'localhost'
 QUEUE_NAME = "scanner_request"
@@ -121,6 +124,7 @@ def scan_directory(path, email, human, rabbit, method):
         send_scan_request(email, path, method)
         logging.info("Scan job sent to queue")
     else:
+        logging.info("Performing local scan")
         scan_directory_logic(path, email, method, human)
 
 

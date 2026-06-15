@@ -83,7 +83,7 @@ Options:
 ```
 
 selecting the du, pdu or default flag only selects the latest one in the line (so doing -du -pdu it would only use pdu)
-These three flags determin the method of scanning
+These three flags determine the method of scanning
 ```
 du takes ~330 seconds
 python takes ~20 seconds

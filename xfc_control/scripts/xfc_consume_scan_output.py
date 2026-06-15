@@ -1,4 +1,8 @@
-'''Consumes output messages from xfc_scan'''
+'''
+Consumes output messages from xfc_scan
+Author: Matteo Guarnaccia
+Date: 28/07/2025
+'''
 
 import calendar
 import pika

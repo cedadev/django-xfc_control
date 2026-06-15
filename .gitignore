@@ -2,3 +2,4 @@ db.sqlite3
 __pycache__/
 xfc_site/settings.py
 secret_key.txt
+*.pyc

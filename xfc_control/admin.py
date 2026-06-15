@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 from django.contrib import admin
-from xfc_control.models import *
+from xfc_control.models import CachedDirectoryScan, CacheDisk, User
 
 # Register CacheDisk model with admin
 
@@ -26,26 +26,14 @@ class UserAdmin(admin.ModelAdmin):
     readonly_fields = ('email', 'formatted_used', 'formatted_total_used', 'last_scanned')
 admin.site.register(User, UserAdmin)
 
-class UserLockAdmin(admin.ModelAdmin):
+class CachedDirectoryScanAdmin(admin.ModelAdmin):
     save_on_top = True
-    list_display = ('id', 'user_lock',)
-    readonly_fields = ('user_lock',)
-admin.site.register(UserLock, UserLockAdmin)
-
-# Register CachedFile model with admin
-
-class CachedFileAdmin(admin.ModelAdmin):
-    save_on_top = True
-    list_display = ('full_path', 'formatted_size', 'first_seen', 'user')
-    fields = ('path', 'formatted_size', 'first_seen', 'user')
-    search_fields = ('path', )
-    readonly_fields = ('path', 'formatted_size', 'first_seen', 'user')
-admin.site.register(CachedFile, CachedFileAdmin)
-
-class ScheduledDeletionAdmin(admin.ModelAdmin):
-    save_on_top = True
-    list_display = ('user', 'time_entered', 'time_delete')
+    list_display = (
+        'user', 'dir_name', 'scan_time', 'dir_mtime', 'size_bytes', 'scan_id'
+    )
     search_fields = ('user',)
-    fields = ('user', 'time_entered', 'time_delete')
-    readonly_fields = ('user', 'time_entered')
-admin.site.register(ScheduledDeletion, ScheduledDeletionAdmin)
+    fields = ('user', 'dir_name', 'scan_time', 'dir_mtime', 'size_bytes', 'scan_id')
+    readonly_fields= (
+        'user', 'dir_name', 'scan_time', 'dir_mtime', 'size_bytes', 'scan_id'
+    )
+admin.site.register(CachedDirectoryScan, CachedDirectoryScanAdmin)

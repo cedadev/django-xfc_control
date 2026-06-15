@@ -3,10 +3,11 @@
  This script is designed to be run via the django-extensions runscript command:
 
   ``python manage.py runscript xfc_scan``
+
+Author: Neil Massey
 """
 
-from xfc_control.models import User, CacheDisk, CachedFile
-from xfc_control.scripts.xfc_scan import calc_user_quota
+from xfc_control.models import User, CacheDisk
 import os
 
 def fix_user_quotas():
@@ -14,7 +15,7 @@ def fix_user_quotas():
     file owned by the user."""
     # get the users in turn
     for user in User.objects.all():
-        calc_user_quota(user)
+        raise NotImplemented("Fix this")
 
 
 def fix_cache_disk_quotas():
@@ -25,6 +26,7 @@ def fix_cache_disk_quotas():
         users = User.objects.filter(cache_disk=cd)
         # for each user get their files
         for user in users:
+            raise NotImplemented("Fix this")
             files = CachedFile.objects.filter(user=user)
             # calculate the total
             for file in files:
