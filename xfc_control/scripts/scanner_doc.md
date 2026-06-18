@@ -93,3 +93,52 @@ pdu takes ~10-15 seconds
 The scanner will now run a quick command to check if pdu or du is on your file system and whether -b works. If pdu is not on your system, it uses du, if du is not on your system, it uses the python version.
 
 if -b does not work then it will use -k and multiply by 1024 which is slightly more inaccurate but it is roughly the same
+
+### Scheduling scans
+
+Building on Matteo's work, we want to have 3 phases to the scan:
+
+1.  Choose which user to scan next, put a message in the Rabbit queue.  The next user to scan should be the one who was scanned last, but doesn't already have a message in the queue.
+  -> xfc_queue_next_scan.py
+2.  Perform a scan by taking the next scan off the queue, scan the user directory, and put the result onto the queue
+  -> xfc_scan.py
+3.  Process the scan by taking the result off the queue and updating the database for the user
+  -> xfc_process_scan.py
+
+
+Declare exchange
+Connect to queue
+Need config in /etc/xfc_control/xfc_config.json
+Follow NLDS config:
+
+"rabbitMQ": {
+  "user" : "",
+  "password": "",
+  "server": "",
+  "admin_port" : "",
+  "vhost" : "",
+  "exchange" : [
+    {
+      "name" : "xfc-dev",
+      "type" : "classic"
+    }
+  ],
+  "queues" : [
+    {
+      "name": "xfc_publish_scan",
+      "bindings": [
+        {
+          "exchange": "xfc-dev",
+        }
+      ]
+    },
+    {
+      "name": "xfc_consume_scan",
+      "bindings": [
+        {
+          "exchange": "xfc-dev",
+        }
+      ]
+    }
+  ]
+}

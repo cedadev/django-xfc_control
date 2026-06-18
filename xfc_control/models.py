@@ -229,6 +229,7 @@ class User(models.Model):
         qs = settings.XFC_DEFAULT_HARD_LIMIT
         return qs
 
+
 class CachedDirectoryScan(models.Model):
     user = models.ForeignKey(
         django_settings.AUTH_USER_MODEL,
