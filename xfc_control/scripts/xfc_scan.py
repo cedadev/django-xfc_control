@@ -14,7 +14,7 @@ xfc_process_scan.py
 Author: Neil Massey and Will Cross
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import os
 import click
@@ -33,24 +33,24 @@ from xfc_control.scripts.RabbitMQConsumer import RabbitMQConsumer
 # need a global config
 config = CFG.load_config()
 logger = CFG.setup_logging(config, __file__)
-# publish TO the consume scan queue
-QUEUE_NAME = "xfc_consume_scan"
-publisher = RabbitMQPublisher(queue_name=QUEUE_NAME)
-publisher.attach_logger(logger)
-publisher.connect()
 
 
 # Rabbit producer
-def publish_results(results):
+def publish_results(username, results):
     global logger
     logger.info("Starting publishing results of scan")
 
-    global publisher
+    # publish TO the consume scan queue
+    PUBLISH_QUEUE_NAME = "xfc_consume_scan"
+    publisher = RabbitMQPublisher(queue_name=PUBLISH_QUEUE_NAME)
+    publisher.attach_logger(logger)
+    publisher.connect()
 
     # publish a message for each result
     for r in results:
         # need to convert the datetimes into floating point numbers
         msg = {
+            "username": username,
             "dir_name": r["dir_name"],
             "scan_time": r["scan_time"].timestamp(),
             "dir_mtime": r["dir_mtime"].timestamp(),
@@ -156,13 +156,12 @@ def determine_best_method(path: str, method: str) -> tuple[str, str]:
 
 
 def shell_method_scan_all(
-    dirs: list[DirEntry], now: datetime, method: str, params: str
+    paths: list[str], now: datetime, method: str, params: str
 ) -> list[dict]:
     """This is the method to scan the directories using a command in the shell,
     i.e. du or pdu commands"""
     global logger
-    # build the list of strings of paths
-    paths = [d.path for d in dirs]
+
     # if no paths
     if not paths:
         return []
@@ -191,32 +190,31 @@ def shell_method_scan_all(
 
         size_map[path] = size
 
-    for entry in dirs:
-        if entry.path not in size_map:
-            logger.warning(f"No size found for {entry.path} in {method} output")
+    for path in paths:
+        if path not in size_map:
+            logger.warning(f"No size found for {path} in {method} output")
         try:
-            stat = entry.stat()
+            stat = os.stat(path)
             results.append(
                 {
-                    "dir_name": entry.path,
+                    "dir_name": path,
                     "scan_time": now,
                     "dir_mtime": datetime.fromtimestamp(stat.st_mtime),
-                    "size": size_map.get(entry.path, 0),
+                    "size": size_map.get(path, 0),
                 }
             )
 
         except Exception as e:
-            logger.error(f"Error processing {entry.path}: {e}")
+            logger.error(f"Error processing {path}: {e}")
 
     return results
 
 
-def python_scan_dir(entry: DirEntry, now: datetime) -> dict:
+def python_scan_dir(path: str, now: datetime) -> dict:
     """Scan a single directory using the default python method"""
     global logger
     try:
-        stat = entry.stat()
-        path = entry.path
+        stat = os.stat(path)
         logger.info(f"Calculating size for directory: {path}")
         size = default_python_du(path)
 
@@ -227,11 +225,11 @@ def python_scan_dir(entry: DirEntry, now: datetime) -> dict:
             "size": size,
         }
     except Exception as e:
-        logger.error(f"Error processing {entry.path}: {e}")
+        logger.error(f"Error processing {path}: {e}")
         return None
 
 
-def python_method_scan_all(dirs: list[DirEntry], now: datetime) -> list[dict]:
+def python_method_scan_all(dirs: list[str], now: datetime) -> list[dict]:
     """Use pure python method to scan all directories in dirs list.
     Uses futures to perform multithreading."""
     results = []
@@ -251,7 +249,7 @@ def python_method_scan_all(dirs: list[DirEntry], now: datetime) -> list[dict]:
 
 
 def scan_all_dirs_from_base(
-    base_path: str, method: str, human: bool = False
+    base_path: str, scan_type: str, method: str, human: bool = False
 ) -> tuple[list[dict], list[dict]]:
     """Scan all the directories below the base_path.
     The best method to use for scanning will be determined and then used."""
@@ -270,19 +268,18 @@ def scan_all_dirs_from_base(
 
     # Build a list of directories to scan from the base path.
     # These are the user's top-level directories in the XFC database.
-    with os.scandir(base_path) as entries:
-        for entry in entries:
-            if entry.is_dir(follow_symlinks=False):
-                dirs.append(entry)
-
-    # if the dirs list is empty, and the base_dir is a directory then set that as the
-    # only entry in the dirs list.  This allows for scanning a single user's directory.
-    if len(dirs) == 0 and os.path.isdir(base_path):
-        with os.scandir(os.path.dirname(base_path)) as entries:
+    # We only need to do this for volume scans
+    if scan_type == "volume_scan":
+        with os.scandir(base_path) as entries:
             for entry in entries:
-                if entry.path == base_path and entry.is_dir(follow_symlinks=False):
-                    dirs.append(entry)
-                    break
+                if entry.is_dir(follow_symlinks=False):
+                    dirs.append(entry.path)
+
+    elif scan_type == "user_scan":
+        dirs = [base_path]
+    else:
+        logger.error(f"Unknown scan_type: {scan_type}")
+        return
 
     # if the method is default then use pure Python scan method
     if method == "default":
@@ -313,13 +310,21 @@ def rabbit_callbackfn(
     properties,
     body,
 ):
+    global config
     # get the dictionary from the body
     body_json = json.loads(body)
+    if "username" in body_json:
+        username = body_json["username"]
+    else:
+        username = ""
+    # scan types are: "user_scan" OR "volume_scan"
+    scan_type = body_json["type"]
     base_dir = body_json["work_dir"]
-    scan_method = "pdu"  # put this in config
-    results, _ = scan_all_dirs_from_base(base_dir, scan_method, human=False)
+    process_name = CFG.get_process_name(__name__)
+    scan_method = config[process_name]["scan_method"]  # put this in config
+    results, _ = scan_all_dirs_from_base(base_dir, scan_type, scan_method, human=False)
     # publish the results to the processing queue
-    publish_results(results)
+    publish_results(username, results)
 
     channel.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -342,7 +347,7 @@ def run(*args):
         consumer.start_consuming(rabbit_callbackfn)
 
     except KeyboardInterrupt:
-        logging.info("Interrupted")
+        logger.info("Interrupted")
         try:
             sys.exit(0)
         except SystemExit:
@@ -352,6 +357,17 @@ def run(*args):
 # CLI
 @click.command()
 @click.option(
+    "-u",
+    "--username",
+    type=str,
+    help=(
+        "\b\n"
+        "The username to perform the scan for.  This is used in the reporting, so must match a username in the XFC database."
+    ),
+    required=False,
+    default="",
+)
+@click.option(
     "-p",
     "--path",
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
@@ -360,7 +376,7 @@ def run(*args):
         "The base path to start the scan at. This is usually the volume under \n"
         "which the user's cache directories appear."
     ),
-    default="",
+    required=True,
 )
 @click.option(
     "--method",
@@ -385,7 +401,9 @@ def run(*args):
     help="Send results to RabbitMQ queue for processing",
 )
 #
-def scan_directory(path: str, human: bool, method: str, rabbit: bool) -> None:
+def scan_directory(
+    username: str, path: str, human: bool, method: str, rabbit: bool
+) -> None:
     """Command line to scan directory, being able to choose the method"""
     # set up the logging
     global logger
@@ -394,7 +412,11 @@ def scan_directory(path: str, human: bool, method: str, rabbit: bool) -> None:
     # start the scan and time it
     path = os.path.abspath(path)
     start = time.time()
-    results, human_res = scan_all_dirs_from_base(path, method, human=human)
+    if username:
+        scan_type = "user_scan"
+    else:
+        scan_type = "volume_scan"
+    results, human_res = scan_all_dirs_from_base(path, scan_type, method, human=human)
     end = time.time()
 
     # output the results
@@ -404,6 +426,8 @@ def scan_directory(path: str, human: bool, method: str, rabbit: bool) -> None:
     if human_res:
         for i, r in enumerate(human_res):
             log_str = f"Result {i+1}/{n}: \nDirectory name : {r['dir_name']}"
+            if username:
+                log_str += f"\n  User         : {username}"
             log_str += f"\n  Scan time    : {r['scan_time']}"
             log_str += f"\n  Modified time: {r['dir_mtime']}"
             log_str += f"\n  Total size   : {r['size']}"
@@ -414,7 +438,7 @@ def scan_directory(path: str, human: bool, method: str, rabbit: bool) -> None:
 
     # publish the results to the processing queue
     if rabbit:
-        publish_results(results)
+        publish_results(username, results)
 
 
 if __name__ == "__main__":

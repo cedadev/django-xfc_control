@@ -44,11 +44,10 @@ class RabbitMQPublisher:
                 f"vhost: {self.rabbit_config[CFG.RABBIT_VHOST]}. "
                 f"Reason: {e}"
             )
-            self.log("critical", msg)
+            self.logger.critical(msg)
             raise RuntimeError(f"ERROR - {msg}")
         else:
-            self.log(
-                "info",
+            self.logger.info(
                 (
                     f"Connected to RabbitMQ server "
                     f"{self.rabbit_config[CFG.RABBIT_SERVER]} "
@@ -63,7 +62,7 @@ class RabbitMQPublisher:
 
     def close(self) -> None:
         """Close the channel"""
-        self.log("info", "Closing RabbitMQ connection")
+        self.logger.info("Closing RabbitMQ connection")
         self.channel.close()
 
     def setup_logging(self, process_name: str) -> None:
@@ -76,13 +75,6 @@ class RabbitMQPublisher:
     def attach_logger(self, logger) -> None:
         """Attach a logger if one has already been created."""
         self.logger = logger
-
-    def log(self, level: str, message: str) -> None:
-        # if the logging is enable and setup_logging has been called then self.logger
-        # will not be null
-        if self.logger:
-            level = CFG.get_logging_level(level)
-            self.logger.log(level=level, msg=message)
 
     def declare_queue(self) -> None:
         """Declare a queue on the rabbit server, using the info in the config"""
@@ -101,10 +93,10 @@ class RabbitMQPublisher:
                 f"{self.queue_config[CFG.RABBIT_QUEUE_TYPE]}. "
                 f"Reason: {e}"
             )
-            self.log("critical", msg)
+            self.logger.critical(msg)
             raise RuntimeError(f"ERROR - {msg}")
         else:
-            self.log("info", f"Declared queue: {self.queue_name}")
+            self.logger.info(f"Declared queue: {self.queue_name}")
 
     def declare_bindings(self):
         """
@@ -119,9 +111,9 @@ class RabbitMQPublisher:
             )
         except Exception as e:
             msg = f"Could not declare exchange: {exchange_name}. Reason: {e}"
-            self.log("critical", msg)
+            self.logger.critical(msg)
         else:
-            self.log("info", f"Declared exchange: {exchange_name} ")
+            self.logger.info(f"Declared exchange: {exchange_name} ")
 
         # Bind the queue to the exchange and routing key
         try:
@@ -135,11 +127,11 @@ class RabbitMQPublisher:
                 f"Could not bind queue: {self.queue_name} to exchange: ",
                 f"{exchange_name}. Reason: {e}",
             )
-            self.log("critical", msg)
+            self.logger.critical(msg)
             raise RuntimeError(f"ERROR - {msg}")
         else:
-            self.log(
-                "info", f"Bound queue: {self.queue_name} to exchange: {exchange_name}"
+            self.logger.info(
+                f"Bound queue: {self.queue_name} to exchange: {exchange_name}"
             )
 
     def publish_message(
@@ -165,11 +157,10 @@ class RabbitMQPublisher:
                 f"to exchange: {self.rabbit_config[CFG.RABBIT_EXCHANGE_NAME]}. "
                 f"Reason: {e}"
             )
-            self.log("critical", msg)
+            self.logger.critical(msg)
             raise RuntimeError(f"ERROR - {msg}")
         else:
-            self.log(
-                "info",
+            self.logger.info(
                 (
                     f"Published message with routing key: "
                     f"{self.queue_config[CFG.RABBIT_RK]} "

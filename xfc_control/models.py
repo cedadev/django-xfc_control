@@ -10,10 +10,9 @@ from sizefield.utils import filesizeformat
 from jasmin_ldap.core import *
 from jasmin_ldap.query import *
 
-import os, sys
+import os
 import subprocess
 import datetime
-import calendar
 import xfc_site.settings as settings
 
 
@@ -224,15 +223,15 @@ class User(models.Model):
 
     @staticmethod
     def get_hard_limit_size():
-        """Get the initial size of the hard limit for the user.  This could be algorithmically
-        determined, but at the moment is just fixed at 2GB."""
+        """Get the initial size of the hard limit for the user.  This could be
+        algorithmically determined, but at the moment is just fixed at 2GB."""
         qs = settings.XFC_DEFAULT_HARD_LIMIT
         return qs
 
 
 class CachedDirectoryScan(models.Model):
     user = models.ForeignKey(
-        django_settings.AUTH_USER_MODEL,
+        User,
         on_delete=models.CASCADE,
         related_name="directory_scans",
     )
@@ -246,3 +245,18 @@ class CachedDirectoryScan(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.dir_name} ({self.size_bytes} bytes)"
+
+    def formatted_scan_time(self):
+        return self.scan_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    formatted_scan_time.short_description = "scan_time"
+
+    def formatted_mtime(self):
+        return self.dir_mtime.strftime("%Y-%m-%d %H:%M:%S")
+
+    formatted_mtime.short_description = "modified_time"
+
+    def formatted_size(self) -> str:
+        return filesizeformat(self.size_bytes)
+
+    formatted_size.short_description = "scan_size"

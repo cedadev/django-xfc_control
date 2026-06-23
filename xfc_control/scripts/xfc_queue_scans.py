@@ -21,13 +21,13 @@ def queue_next_user(publisher: RabbitMQPublisher):
     if user:
         publish_user_scan_message(publisher, user)
     else:
-        publisher.log("error", "No user selected for scan")
+        publisher.logger.error("No user selected for scan")
 
 
 def queue_all_users(publisher: RabbitMQPublisher):
     users = User.objects.order_by("last_scanned").all()
     if len(users) == 0:
-        publisher.log("error", "No users selected for scan")
+        publisher.logger.error("No users selected for scan")
 
     for user in users:
         publish_user_scan_message(publisher, user)
@@ -36,7 +36,7 @@ def queue_all_users(publisher: RabbitMQPublisher):
 def queue_all_volumes(publisher: RabbitMQPublisher):
     volumes = CacheDisk.objects.all()
     if len(volumes) == 0:
-        publisher.log("error", "No volumes selected for scan")
+        publisher.logger.error("No volumes selected for scan")
 
     for volume in volumes:
         publish_volume_scan_message(publisher, volume)
@@ -47,8 +47,7 @@ def publish_user_scan_message(
     user: User,
 ):
     user_dir = os.path.join(user.cache_disk.mountpoint, user.cache_path)
-    publisher.log(
-        "info",
+    publisher.logger.info(
         f"Sending scan message for user: {user.name}, with directory: " f"{user_dir}",
     )
     scan_message = {
@@ -64,8 +63,9 @@ def publish_volume_scan_message(
     volume: CacheDisk,
 ):
     volume_dir = os.path.join(volume.mountpoint, "user_cache")
-    publisher.log("info", f"Sending scan message for volume: {volume_dir}")
+    publisher.logger.info(f"Sending scan message for volume: {volume_dir}")
     scan_message = {
+        "username": "",
         "type": "volume_scan",
         "work_dir": volume_dir,
     }
@@ -78,7 +78,7 @@ def run(*args):
     QUEUE_NAME = "xfc_publish_scan"
     publisher = RabbitMQPublisher(queue_name=QUEUE_NAME)
     publisher.setup_logging(__name__)
-    publisher.log("debug", f"Starting process: {__name__}")
+    publisher.logger.debug(f"Starting process: {__name__}")
     publisher.connect()
     if "one_user" in args:
         queue_next_user(publisher=publisher)

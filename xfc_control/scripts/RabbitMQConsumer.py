@@ -20,7 +20,7 @@ class RabbitMQConsumer(RabbitMQPublisher):
             self.channel.start_consuming()
         except Exception as e:
             msg = f"Could not start consumer for Queue: {self.queue_name} Reason {e}"
-            self.log("critical", msg)
+            self.logger.critical(msg)
             raise RuntimeError(f"ERROR - {msg}")
         else:
-            self.log("info", f"Started consumer for Queue: {self.queue_name}")
+            self.logger.info(f"Started consumer for Queue: {self.queue_name}")
