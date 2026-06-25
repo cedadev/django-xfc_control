@@ -5,12 +5,12 @@ Date: 28/07/2025
 """
 
 import calendar
-from xfc_control.models import User, CachedDirectoryScan
+from xfc_control.models import User, CachedDirectoryScan, CacheDisk
 import sys
 import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.core.mail import send_mail
 from xfc_control.scripts.RabbitMQConsumer import RabbitMQConsumer
 import xfc_control.scripts.config as CFG
@@ -98,8 +98,11 @@ def process_scan_output(result: dict) -> None:
     )
     completed_scan.save()
     log_scan(completed_scan, "\nCommitting scan:")
-    # Now the scan has been added, update the quotas
+    # Now the scan has been added, update the user quota
     update_user_quota(user)
+    # Update the disk quota as well
+    cache_disk = user.cache_disk
+    update_cache_disk_quota(cache_disk)
 
 
 def log_scan(scan: CachedDirectoryScan, log_str="") -> None:
@@ -113,35 +116,79 @@ def log_scan(scan: CachedDirectoryScan, log_str="") -> None:
     logger.info(log_str)
 
 
+def calculate_temporal_usage_3(scans: list[CachedDirectoryScan]):
+    """
+    Calculate the temporal usage.
+    This is as simple as the length of time between scans multiplied by the scan size.
+    The complication comes when the scan size is less than the previous scan size.
+    To counteract this the algorithm is:
+        1. Calculate the temporal usage backwards, i.e. start with the latest scan
+        1. The maximum size is the size of the current scan = max_size
+        2. For each scan, the contribution to the temporal usage is the minimum of the
+           scan and the maximum size * time between scans:
+           C = min(scan_size, max_size) * time_delta
+        3. Update the maximum size at each iteration.  This
+
+    This can be thought of via the following scenario:
+        1. The user adds data to the volume, it keeps increasing.  The temporal usage
+           goes up in line with this.
+        2. The user removes data from the volume. It drops to X bytes.
+        3. The temporal usage still needs to reflect that this amount of data has been
+           present since the scan size was above or equal to X.
+        4. Hence taking the min between the latest scan size and the sizes for
+           each of the scans.
+        5. The usage could drop to Y bytes where Y < X, before the user adds more data
+           to take the latest scan to X bytes.
+        6. This is why the scan is performed backwards, and the max_size is constantly
+           updated.
+    """
+    global logger
+
+    n_scans = scans.count()
+    lsi = n_scans - 1  # last scan index
+
+    max_size = scans[lsi].size_bytes  # maximum size of scan
+    n_secs_day = 24 * 60 * 60  # number of seconds per day
+    temporal_size = scans[lsi].size_bytes  # start with latest scan size
+
+    log_str = "\nUpdating user quota from scans:"
+    log_str += f"\n    Directory     : {scans[lsi].dir_name}"
+    log_str += f"\n    User          : {scans[lsi].user}"
+
+    # loop backwards
+    x = 1
+    for i in range(n_scans - 1, 0, -1):
+        log_str += (
+            f"\n    Scan ({x}/{n_scans})    : "
+            f"{scans[i].formatted_scan_time()} : {scans[i].formatted_size()}"
+        )
+        # get the minimum scan size
+        c_scan_size = min(scans[i - 1].size_bytes, max_size)
+        # get the time delta
+        td = (scans[i].scan_time - scans[i - 1].scan_time).total_seconds()
+        temporal_size += c_scan_size * td / n_secs_day
+        # update max size
+        max_size = min(max_size, scans[i - 1].size_bytes)
+        x += 1
+    logger.info(log_str)
+    return temporal_size
+
+
 def update_user_quota(user: User) -> None:
     """Loop through the CachedDirectoryScans for a user and calculate their used quota."""
     # get all the scans
     global logger
 
     scans = CachedDirectoryScan.objects.filter(user=user).order_by("scan_time")
-    if scans.count() == 1:
-        total_size = scans[0].size_bytes
-        temporal_size = scans[0].size_bytes
-        log_scan(scans[0], "\nProcessing scan:")
-    else:
-        temporal_size = 0.0
-        for i in range(1, scans.count()):
-            log_scan(scans[i], "\nProcessing scan:")
-            size_delta = scans[i].size_bytes - scans[i - 1].size_bytes
-            time_delta = scans[i].scan_time - scans[i - 1].scan_time
-            # use the time in seconds
-            temporal_size += float(size_delta * time_delta.seconds) / (24 * 60 * 60)
-        total_size = scans[scans.count() - 1].size_bytes
+    total_size = scans[scans.count() - 1].size_bytes
+    temporal_size = calculate_temporal_usage_3(scans=scans)
 
-    # Clamp the size at zero
-    if temporal_size < 0.0:
-        temporal_size = 0.0
     # round to int
     temporal_size = int(temporal_size)
 
     log_str = f"\n  Updating quota for user {user.name}: "
-    log_str += f"\n  Total size : {total_size} Bytes"
-    log_str += f"\n  Temporal size: {temporal_size} Bytes"
+    log_str += f"\n  Total size      : {format_size(total_size)}"
+    log_str += f"\n  Temporal size   : {format_size(temporal_size)}"
     logger.info(log_str)
 
     user.total_used = total_size
@@ -162,8 +209,37 @@ def update_all_user_quotas() -> None:
         update_user_quota(user)
 
 
+def update_cache_disk_quota(cache_disk: CacheDisk) -> None:
+    """Update the amount of space used on the cache_disk"""
+    # get the users who have used this CacheDisk
+    global logger
+    users = User.objects.filter(cache_disk=cache_disk)
+    sum = 0.0
+
+    log_str = f"\nUpdating CacheDisk: {cache_disk.mountpoint}"
+    for user in users:
+        # get the last CachedDirectoryScan for the user
+        scan = (
+            CachedDirectoryScan.objects.filter(user=user).order_by("scan_time").last()
+        )
+        log_str += f"\n  Adding used_bytes by: {user.name}, total_used: {scan.formatted_size()}"
+        sum += scan.size_bytes
+    # set to the sum
+    cache_disk.used_bytes = sum
+    log_str += (
+        f"\n  Total used: {cache_disk.formatted_used()} / {cache_disk.formatted_size()}"
+    )
+    logger.info(log_str)
+
+
+def update_all_cache_disk_quota() -> None:
+    """Update all the cache disks"""
+    for cache_disk in CacheDisk.objects.all():
+        update_cache_disk_quota(cache_disk)
+
+
 def check_user_quota_usage(user: User):
-    if user.quota_size < user.quota_used:
+    if user.quota_size < user.quota_used or user.hard_limit_size < user.total_used:
         send_notification_email(user)
 
 
@@ -204,6 +280,7 @@ def run(*args):
     try:
         if "update" in args:
             update_all_user_quotas()
+            update_all_cache_disk_quota()
         else:
             main()
     except KeyboardInterrupt:
