@@ -8,33 +8,22 @@ Author: Neil Massey
 """
 
 from xfc_control.models import User, CacheDisk
+from xfc_process_scan import update_user_quota, update_cache_disk_quota
 import os
+
 
 def fix_user_quotas():
     """Fix each user quota in turn by interrogating how much space is used for each
     file owned by the user."""
     # get the users in turn
     for user in User.objects.all():
-        raise NotImplemented("Fix this")
+        update_user_quota(user)
 
 
 def fix_cache_disk_quotas():
     # for each cache disk, get the files
     for cd in CacheDisk.objects.all():
-        cache_disk_sum = 0
-        # get the users using this cache disk
-        users = User.objects.filter(cache_disk=cd)
-        # for each user get their files
-        for user in users:
-            raise NotImplemented("Fix this")
-            files = CachedFile.objects.filter(user=user)
-            # calculate the total
-            for file in files:
-                file_path = os.path.join(cd.mountpoint, file.path)
-                cache_disk_sum += file.size
-            # reassign and save
-            cd.used_bytes = cache_disk_sum
-            cd.save()
+        update_cache_disk_quota(cd)
 
 
 def run():
