@@ -105,12 +105,14 @@ Building on Matteo's work, we want to have 3 phases to the scan:
 3.  Process the scan by taking the result off the queue and updating the database for the user
   -> xfc_process_scan.py
 
+### Connecting to Rabbit
 
-Declare exchange
-Connect to queue
-Need config in /etc/xfc_control/xfc_config.json
-Follow NLDS config:
+* Declare exchange
+* Connect to queue
+* Need config in /etc/xfc_control/xfc_config.json
+* Follow NLDS config:
 
+```
 "rabbitMQ": {
   "user" : "",
   "password": "",
@@ -142,3 +144,4 @@ Follow NLDS config:
     }
   ]
 }
+```
