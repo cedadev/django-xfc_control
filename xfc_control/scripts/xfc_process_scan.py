@@ -15,6 +15,7 @@ from django.core.mail import send_mail
 from xfc_control.scripts.RabbitMQConsumer import RabbitMQConsumer
 import xfc_control.scripts.config as CFG
 from xfc_control.scripts.xfc_scan import format_size
+from xfc_site import settings
 
 logger = None
 
@@ -35,7 +36,7 @@ def main() -> None:
 
     CONSUME_QUEUE_NAME = "xfc_consume_scan"
     consumer = RabbitMQConsumer(queue_name=CONSUME_QUEUE_NAME)
-    consumer.setup_logging(__name__)
+    consumer.setup_logging(process_name=__name__)
     consumer.connect()
     # make the logger available globally
     logger = consumer.logger
@@ -200,11 +201,8 @@ def update_all_user_quotas() -> None:
     """Run update_user_quota on all Users"""
     # Need to instantiate a logger
     global logger
-    config = CFG.load_config()
-    logger = CFG.setup_logging(
-        config=config,
-        process_name=__name__,
-    )
+    CFG.load_config()
+    logger = CFG.setup_logging(process_name=__name__)
     for user in User.objects.all():
         update_user_quota(user)
 
@@ -249,9 +247,10 @@ def send_notification_email(user: User):
         return
 
     # to address is notify_on_first
+    # get the user email address from the accounts portal
     toaddrs = [user.email]
-    # from address is just a dummy address
-    fromaddr = "support@jasmin.ac.uk"
+    # from address is the jasmin support email
+    fromaddr = settings.SERVER_EMAIL
 
     date = user.last_scanned or datetime.datetime.now(datetime.timezone.utc)
 
@@ -265,7 +264,10 @@ def send_notification_email(user: User):
         date.minute,
     )
 
-    msg = f"You have exceeded your quota of {user.formatted_size()}. You have used {user.formatted_used()}, as of{date_string}UTC"
+    msg = (
+        f"You have exceeded your quota of {user.formatted_size()}. You have used "
+        f"{user.formatted_used()}, as of {date_string} UTC"
+    )
     logging.info(f"Sending quota exceeded email to {user.name}")
 
     try:

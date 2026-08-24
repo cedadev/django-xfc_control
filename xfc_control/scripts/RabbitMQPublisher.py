@@ -5,17 +5,17 @@ Publisher class for RabbitMQ queue
 import pika
 import xfc_control.scripts.config as CFG
 import json
+from xfc_site import settings
 
 
 class RabbitMQPublisher:
 
     def __init__(self, queue_name: str = "publisher"):
         # Load the config and extract the rabbit config
-        self.config = CFG.load_config()
-        self.rabbit_config = self.config[CFG.RABBIT_CONFIG_SECTION]
+        CFG.load_config()
+        self.rabbit_config = settings.RABBIT_MQ
         self.queue_name = queue_name
         self.queue_config = CFG.get_queue_config(
-            self.config,
             self.queue_name,
         )
         self.channel = None
@@ -67,10 +67,7 @@ class RabbitMQPublisher:
 
     def setup_logging(self, process_name: str) -> None:
         """Create and setup logging."""
-        self.logger = CFG.setup_logging(
-            config=self.config,
-            process_name=process_name,
-        )
+        self.logger = CFG.setup_logging(process_name=process_name)
 
     def attach_logger(self, logger) -> None:
         """Attach a logger if one has already been created."""

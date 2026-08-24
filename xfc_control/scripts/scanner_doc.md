@@ -96,20 +96,20 @@ if -b does not work then it will use -k and multiply by 1024 which is slightly m
 
 ### Scheduling scans
 
-Building on Matteo's work, we want to have 3 phases to the scan:
+Building on Matteo's work, we have 3 phases to the scan:
 
-1.  Choose which user to scan next, put a message in the Rabbit queue.  The next user to scan should be the one who was scanned last, but doesn't already have a message in the queue.
-  -> xfc_queue_next_scan.py
-2.  Perform a scan by taking the next scan off the queue, scan the user directory, and put the result onto the queue
-  -> xfc_scan.py
-3.  Process the scan by taking the result off the queue and updating the database for the user
-  -> xfc_process_scan.py
+1.  Choose which user to scan next, put a message in the Rabbit queue.  The next user to scan should be the one who was scanned last, but doesn't already have a message in the queue.  There is flexibility here as the admin can choose "all_users", "next_user" or "all_volumes".
+  `xfc_queue_scans.py`
+2.  Perform a scan by taking the next scan off the queue, scan the user directory, and put the result onto the queue.  The admin can also run this from the command line (i.e. without needing a message to kick it off).  In this case they need to specify a user and a directory.  The result is still put back on the queue.
+  `xfc_scan.py`
+3.  Process the scan by taking the result off the queue and updating the database for the user.
+  `xfc_process_scan.py`
 
 ### Connecting to Rabbit
 
 * Declare exchange
 * Connect to queue
-* Need config in /etc/xfc_control/xfc_config.json
+* Need config in the django settings files 
 * Follow NLDS config:
 
 ```

@@ -1,11 +1,11 @@
-"""Read in the config file for, convert from JSON to a dictionary and return
-the config xfc."""
+"""Read in the config file from the settings import, to a dictionary and return
+the config."""
 
 import json
 import logging
 import os
+from xfc_site import settings
 
-RABBIT_CONFIG_SECTION = "rabbitMQ"
 RABBIT_USER = "user"
 RABBIT_PASSWORD = "password"
 RABBIT_SERVER = "server"
@@ -25,52 +25,26 @@ LOG_ENABLE = "enable"
 LOGGING = "logging"
 
 
-def config_path():
-    """Return the path of the config file"""
-    path = "/etc/xfc_control/xfc_config.json"
-    return path
-
-
-def load_config(config_file_path: str = "") -> dict:
-    if config_file_path == "":
-        config_file_path = config_path()
-    try:
-        fh = open(os.path.expanduser(f"{config_file_path}"))
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            f"{config_file_path}", "The config file cannot be found."
-        )
-    # Load the JSON file, ensuring it is correctly formatted
-    try:
-        json_config = json.load(fh)
-        fh.close()
-    except json.JSONDecodeError as je:
-        raise RuntimeError(
-            f"The config file at {config_file_path} has an error at "
-            f"character {je.pos}: {je.msg}."
-        )
+def load_config() -> dict:
     # Add defaults if not in json_config
-    if RABBIT_HEARTBEAT not in json_config[RABBIT_CONFIG_SECTION]:
-        json_config[RABBIT_CONFIG_SECTION][RABBIT_HEARTBEAT] = 2
-    if RABBIT_TIMEOUT not in json_config[RABBIT_CONFIG_SECTION]:
-        json_config[RABBIT_CONFIG_SECTION][RABBIT_TIMEOUT] = 30
-    return json_config
+    if RABBIT_HEARTBEAT not in settings.RABBIT_MQ:
+        settings.RABBIT_MQ[RABBIT_HEARTBEAT] = 2
+    if RABBIT_TIMEOUT not in settings.RABBIT_MQ:
+        settings.RABBIT_MQ[RABBIT_TIMEOUT] = 30
+    return settings
 
 
-def get_queue_config(
-    config: dict,
-    queue_name: str,
-):
+def get_queue_config(queue_name: str):
     # get the config for a particular queue with the name in queue_name
-    all_queues = config[RABBIT_CONFIG_SECTION][RABBIT_QUEUES]
+    all_queues = settings.RABBIT_MQ[RABBIT_QUEUES]
     for q in all_queues:
         if q[RABBIT_QUEUE_NAME] == queue_name:
             return q
     return None
 
 
-def get_logging_config(config: dict, process_name: str):
-    process_config = config[process_name][LOGGING]
+def get_logging_config(process_name: str):
+    process_config = settings.XFC_LOGGING[process_name]
     return process_config
 
 
@@ -102,11 +76,10 @@ def get_logging_format():
     return formt
 
 
-def setup_logging(config: dict, process_name: str):
+def setup_logging(process_name: str):
     """Generic logging setup to output to a file and the stdout."""
     # get the logging config
     log_cfg = get_logging_config(
-        config,
         get_process_name(process_name),
     )
     # only continue if the logging is enabled

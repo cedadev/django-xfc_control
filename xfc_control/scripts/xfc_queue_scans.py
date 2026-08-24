@@ -15,6 +15,15 @@ import os
 from xfc_control.scripts.RabbitMQPublisher import RabbitMQPublisher
 
 
+def queue_actual_user(publisher: RabbitMQPublisher, username: str):
+    user = User.objects.filter(name=username)
+    print(user.name)
+    if user:
+        publish_user_scan_message(publisher, user)
+    else:
+        publisher.logger.error("No user selected for scan")
+
+
 def queue_next_user(publisher: RabbitMQPublisher):
     user = User.objects.order_by("last_scanned").first()
 
@@ -77,18 +86,21 @@ def run(*args):
     # Create the publisher for the rabbit Q
     QUEUE_NAME = "xfc_publish_scan"
     publisher = RabbitMQPublisher(queue_name=QUEUE_NAME)
-    publisher.setup_logging(__name__)
+    publisher.setup_logging(process_name=__name__)
     publisher.logger.debug(f"Starting process: {__name__}")
     publisher.connect()
+    print(args)
     if "one_user" in args:
         queue_next_user(publisher=publisher)
     elif "all_users" in args:
         queue_all_users(publisher=publisher)
     elif "all_vols" in args:
         queue_all_volumes(publisher=publisher)
+    elif "user" in args:
+        queue_actual_user(publisher=publisher, username=args[1])
     else:
         print(
             "No args supplied: use `--script-args all_users` or `--script-args "
-            "one_user` or `--script-args all_vols`"
+            "one_user` or `--script-args all_vols` or `--script-args user <username>"
         )
     publisher.close()

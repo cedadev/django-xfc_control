@@ -14,25 +14,25 @@ xfc_process_scan.py
 Author: Neil Massey and Will Cross
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 import time
 import os
 import click
-import logging
 import sys
 import subprocess
 import json
+from django.conf import settings
 
 from concurrent.futures import ThreadPoolExecutor
-from posix import DirEntry
 
 import xfc_control.scripts.config as CFG
 from xfc_control.scripts.RabbitMQPublisher import RabbitMQPublisher
 from xfc_control.scripts.RabbitMQConsumer import RabbitMQConsumer
+from xfc_site import settings
 
-# need a global config
-config = CFG.load_config()
-logger = CFG.setup_logging(config, __file__)
+# load the config and setup the logger
+CFG.load_config()
+logger = CFG.setup_logging(__file__)
 
 
 # Rabbit producer
@@ -116,6 +116,7 @@ def determine_best_method(path: str, method: str) -> tuple[str, str]:
         1. default: the fallback method.  This uses Python libraries to scan.
         2. du: the operating system method of du
         3. pdu: parallel du, usually the fastest, where supported
+        4. pananas? : this needs to be divided by 1.3 to get the true value
     In addition the reporting method is determined by checking to see if each command
     supports reporting in bytes (most accurate) vs reporting in kilobytes
         1. -sb: report in bytes
@@ -233,7 +234,7 @@ def python_method_scan_all(dirs: list[str], now: datetime) -> list[dict]:
     """Use pure python method to scan all directories in dirs list.
     Uses futures to perform multithreading."""
     results = []
-    max_workers = 8  # NRM - get this from config
+    max_workers = settings.MAX_WORKERS
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
 
@@ -321,7 +322,7 @@ def rabbit_callbackfn(
     scan_type = body_json["type"]
     base_dir = body_json["work_dir"]
     process_name = CFG.get_process_name(__name__)
-    scan_method = config[process_name]["scan_method"]  # put this in config
+    scan_method = settings.SCAN_METHOD  # put this in config
     results, _ = scan_all_dirs_from_base(base_dir, scan_type, scan_method, human=False)
     # publish the results to the processing queue
     publish_results(username, results)
