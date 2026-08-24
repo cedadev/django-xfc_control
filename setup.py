@@ -14,7 +14,7 @@ setup(
     packages=["xfc_control", "xfc_site"],
     install_requires=[
         "appdirs",
-        "django==6.0.6",
+        "django==6.0.7",
         "django-sizefield",
         "django-extensions",
         "django-multiselectfield",
@@ -22,10 +22,12 @@ setup(
         "packaging",
         "pyparsing",
         "pytz",
+        "pyasn1==0.6.4",
         "six",
         "jasmin-ldap @ git+https://github.com/cedadev/jasmin-ldap.git@v1.0.2#egg=jasmin-ldap",
         "click",
         "pika",
+        "sqlparse==0.6.0",
     ],
     include_package_data=True,
     license="my License",  # example license
