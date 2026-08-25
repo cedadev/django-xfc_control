@@ -1,7 +1,7 @@
 appdirs==1.4.4
 asgiref==3.11.1
 click==8.4.1
-Django==6.0.7
+Django>=5.2
 django-extensions==4.1
 django-multiselectfield==1.0.1
 django-sizefield==2.1.0
