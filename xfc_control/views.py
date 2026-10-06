@@ -512,3 +512,19 @@ class CacheDiskView(View):
         data = {"cache_disks": disks}
 
         return HttpResponse(json.dumps(data), content_type="application/json")
+
+
+class CachedDirectoryScanView(View):
+    """:rest-api"""
+
+    def get(self, request, *args, **kwargs):
+        data = {}
+        return HttpResponse(json.dumps(data), content_type="application/json")
+
+
+class PredictView(View):
+    """:rest-api"""
+
+    def get(self, request, *args, **kwargs):
+        data = {}
+        return HttpResponse(json.dumps(data), content_type="application/json")
