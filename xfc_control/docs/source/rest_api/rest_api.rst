@@ -5,7 +5,5 @@ HTTP API
    :maxdepth: 2
 
    UserView
-   CachedFileView
    CacheDiskView
-   ScheduledDeletionView
-   Predict
+   CachedDirectoryScanView

@@ -5,7 +5,6 @@ Scripts
    :maxdepth: 2
 
    xfc_scan
-   xfc_schedule
-   xfc_delete
+   xfc_queue_scans
+   xfc_process_scan
    xfc_fix_quotas
-   xfc_user_lock

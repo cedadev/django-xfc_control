@@ -196,6 +196,10 @@ def update_user_quota(user: User) -> None:
     user.quota_used = temporal_size
     user.save()
 
+    # check whether the user quotas have been reached and whether an email should be
+    # sent
+    check_user_quota_usage(user)
+
 
 def update_all_user_quotas() -> None:
     """Run update_user_quota on all Users"""
@@ -265,8 +269,15 @@ def send_notification_email(user: User):
     )
 
     msg = (
-        f"You have exceeded your quota of {user.formatted_size()}. You have used "
-        f"{user.formatted_used()}, as of {date_string} UTC"
+        f"You have exceeded your quota of disk space on the XFC, as of {date_string}.\n"
+        f"You have used: \n"
+        f"   {user.formatted_used(): 10} / {user.formatted_size(): 10} of the temporal "
+        f"quota.\n"
+        f"   {user.formatted_total_used():10} / {user.formatted_hard_limit():10} of the"
+        f" total quota.\n\n"
+        f"Please tidy up your XFC directory so as to release space for other users.\n\n"
+        f"Your XFC directory is: {user.cache_path()}\n\n"
+        f"Thanks, \nThe JASMIN team.\n"
     )
     logging.info(f"Sending quota exceeded email to {user.name}")
 
