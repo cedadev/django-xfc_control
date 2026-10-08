@@ -14,7 +14,7 @@ setup(
     packages=["xfc_control", "xfc_site"],
     install_requires=[
         "appdirs",
-        "django>=5.2",
+        "django>=5.2.17",
         "django-sizefield",
         "django-extensions",
         "django-multiselectfield",
