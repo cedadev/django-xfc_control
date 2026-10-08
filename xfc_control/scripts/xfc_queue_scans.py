@@ -17,7 +17,6 @@ from xfc_control.scripts.RabbitMQPublisher import RabbitMQPublisher
 
 def queue_actual_user(publisher: RabbitMQPublisher, username: str):
     user = User.objects.filter(name=username)
-    print(user.name)
     if user:
         publish_user_scan_message(publisher, user)
     else:
@@ -26,7 +25,6 @@ def queue_actual_user(publisher: RabbitMQPublisher, username: str):
 
 def queue_next_user(publisher: RabbitMQPublisher):
     user = User.objects.order_by("last_scanned").first()
-
     if user:
         publish_user_scan_message(publisher, user)
     else:
@@ -82,14 +80,14 @@ def publish_volume_scan_message(
 
 
 def run(*args):
-    """Entry point for the Django script run via ``./manage.py runscript``"""
+    """Entry point for the Django script run via ``./manage.py runscript xfc_queue_scans``"""
     # Create the publisher for the rabbit Q
     QUEUE_NAME = "xfc_publish_scan"
     publisher = RabbitMQPublisher(queue_name=QUEUE_NAME)
     publisher.setup_logging(process_name=__name__)
     publisher.logger.debug(f"Starting process: {__name__}")
     publisher.connect()
-    print(args)
+
     if "one_user" in args:
         queue_next_user(publisher=publisher)
     elif "all_users" in args:
