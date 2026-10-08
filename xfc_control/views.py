@@ -28,8 +28,8 @@ def send_notification_email(user, notify):
     """
     # to address is user.email
     toaddrs = [user.email]
-    # from address is just a dummy address
-    fromaddr = "support@ceda.ac.uk"
+    # from address is the helpdesk email
+    fromaddr = settings.SERVER_EMAIL
 
     # subject
     subject = "[XFC] - Notifications"
@@ -528,3 +528,13 @@ class PredictView(View):
     def get(self, request, *args, **kwargs):
         data = {}
         return HttpResponse(json.dumps(data), content_type="application/json")
+
+
+class OldApiView(View):
+    """:rest-api"""
+
+    def get(self, request, *args, **kwargs):
+        return HttpError(
+            {"error": "Unsupported version of the API. Please update your client"},
+            status=400,
+        )
