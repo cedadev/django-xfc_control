@@ -11,8 +11,10 @@ Transfer Cache Control
    :caption: Contents:
 
    models/models
-   scripts/scripts
    rest_api/rest_api
+   scripts/scripts
+   scanner_doc
+   update_plan
 
 Indices and tables
 ==================
