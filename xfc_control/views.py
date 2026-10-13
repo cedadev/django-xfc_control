@@ -523,10 +523,105 @@ class CachedDirectoryScanView(View):
 
 
 class PredictView(View):
-    """:rest-api"""
-
     def get(self, request, *args, **kwargs):
-        data = {}
+        """:rest-api
+
+        .. http:get:: /xfc_control/api/v1/predict
+
+                Predict when the user's quota will be exceeeded
+
+                :queryparam string name: (*optional*) The username (same as JASMIN username).
+
+                ..
+
+            :>jsonarr Dictionary prediction: Details of the prediction returned, the dictionary contains:
+
+                ..
+
+                    - **name** (`string`): the name of the user who owns this scheduled deletion
+                    - **time_predict** (`string`): the date when the quota will be exceeded, in isoformat
+                    - **over_quota** (`int`): the amount that the user will exceed the quota by
+                    - **cache_disk** (`string`): mountpoint of the cache disk where the files are kept
+
+                :statuscode 200: request completed successfully
+
+                :statuscode 404: name not fourd - i.e. user does not exist
+
+                **Example request**
+
+                .. sourcecode:: http
+
+                    GET /xfc_control/api/v1/predict?name=fred HTTP/1.1
+                    Host: xfc.ceda.ac.uk
+                    Accept: application/json
+
+                **Example response**
+
+                .. sourcecode:: http
+
+                    HTTP/1.1 200 OK
+                    Vary: Accept
+                    Content-Type: application/json
+
+                    [
+                    {
+                        "cache_disk": "/cache/disk1",
+                        "over_quota": 1207043264,
+                        "name": "dhk63261",
+                        "time_predict": "2017-05-23T15:43:47.437739"
+                    }
+                    ]
+
+        """
+        # First get the user details
+        error_data = {}
+        if len(request.GET) == 0:
+            return HttpError({"error": "No name supplied."})
+        else:
+            # get the username
+            username = request.GET.get("name", "")
+            try:
+                if username:
+                    user = User.objects.get(name=username)
+                else:
+                    error_data["error"] = "Error with name parameter."
+                    return HttpError(error_data)
+            except:
+                error_data["error"] = "User not found."
+                return HttpError(error_data)
+
+        # now calculate the number of days until the quota will run out
+        # first check that the user has files
+        if user.total_used == 0:
+            data = {
+                "name": username,
+                "over_quota": 0,
+                "cache_disk": user.cache_disk.mountpoint,
+                "time_predict": None,
+            }
+            return HttpResponse(json.dumps(data), content_type="application/json")
+        n_days = int((user.quota_size - user.quota_used) / user.total_used) + 1
+        max_days = 100 * 365  # set maximum to be in 100 years
+        # check for n_days being large - return 0 files for "never exceeded"
+        if n_days > max_days:
+            data = {
+                "name": username,
+                "over_quota": 0,
+                "cache_disk": user.cache_disk.mountpoint,
+                "time_predict": None,
+            }
+        else:
+            # calculate how much over
+            over_quota = n_days * user.total_used + user.quota_used - user.quota_size
+            date = datetime.datetime.now() + datetime.timedelta(
+                days=n_days, microseconds=0
+            )
+            data = {
+                "name": username,
+                "time_predict": date.strftime("%Y-%m-%d"),
+                "cache_disk": user.cache_disk.mountpoint,
+                "over_quota": over_quota,
+            }
         return HttpResponse(json.dumps(data), content_type="application/json")
 
 

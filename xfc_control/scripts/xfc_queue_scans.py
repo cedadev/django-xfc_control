@@ -16,7 +16,7 @@ from xfc_control.scripts.RabbitMQPublisher import RabbitMQPublisher
 
 
 def queue_actual_user(publisher: RabbitMQPublisher, username: str):
-    user = User.objects.filter(name=username)
+    user = User.objects.filter(name=username).first()
     if user:
         publish_user_scan_message(publisher, user)
     else:
