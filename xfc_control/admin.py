@@ -2,50 +2,93 @@
 from __future__ import unicode_literals
 
 from django.contrib import admin
-from xfc_control.models import *
+from xfc_control.models import CachedDirectoryScan, CacheDisk, User
 
 # Register CacheDisk model with admin
 
+
 class CacheDiskAdmin(admin.ModelAdmin):
     save_on_top = True
-    list_display = ('mountpoint', 'formatted_size', 'formatted_allocated', 'formatted_used')
-    search_fields = ('mountpoint',)
-    fields = ('mountpoint', 'size_bytes', 'formatted_allocated', 'formatted_used')
-    readonly_fields = ('formatted_allocated', 'formatted_used',)
+    list_display = (
+        "mountpoint",
+        "formatted_size",
+        "formatted_allocated",
+        "formatted_used",
+    )
+    search_fields = ("mountpoint",)
+    fields = ("mountpoint", "size_bytes", "formatted_allocated", "formatted_used")
+    readonly_fields = (
+        "formatted_allocated",
+        "formatted_used",
+    )
+
+
 admin.site.register(CacheDisk, CacheDiskAdmin)
 
 # Register User model with admin
 
+
 class UserAdmin(admin.ModelAdmin):
     save_on_top = True
-    list_display = ('name', 'email', 'notify', 'formatted_size', 'formatted_used',
-                    'formatted_hard_limit', 'formatted_total_used','cache_disk', 'cache_path')
-    fields = ('name', 'email', 'notify', 'quota_size', 'formatted_used',
-              'hard_limit_size', 'formatted_total_used', 'cache_disk', 'cache_path')
-    search_fields = ('name', 'email')
-    readonly_fields = ('email', 'formatted_used', 'formatted_total_used')
+    list_display = (
+        "name",
+        "email",
+        "notify",
+        "formatted_size",
+        "formatted_used",
+        "formatted_hard_limit",
+        "formatted_total_used",
+        "cache_disk",
+        "cache_path",
+        "last_scanned",
+    )
+    fields = (
+        "name",
+        "email",
+        "notify",
+        "quota_size",
+        "formatted_used",
+        "hard_limit_size",
+        "formatted_total_used",
+        "cache_disk",
+        "cache_path",
+        "last_scanned",
+    )
+    search_fields = ("name", "email")
+    readonly_fields = (
+        "email",
+        "formatted_used",
+        "formatted_total_used",
+        "last_scanned",
+    )
+
+
 admin.site.register(User, UserAdmin)
 
-class UserLockAdmin(admin.ModelAdmin):
-    save_on_top = True
-    list_display = ('id', 'user_lock',)
-    readonly_fields = ('user_lock',)
-admin.site.register(UserLock, UserLockAdmin)
 
-# Register CachedFile model with admin
+class CachedDirectoryScanAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request, obj=None):
+        return False
 
-class CachedFileAdmin(admin.ModelAdmin):
     save_on_top = True
-    list_display = ('full_path', 'formatted_size', 'first_seen', 'user')
-    fields = ('path', 'formatted_size', 'first_seen', 'user')
-    search_fields = ('path', )
-    readonly_fields = ('path', 'formatted_size', 'first_seen', 'user')
-admin.site.register(CachedFile, CachedFileAdmin)
+    list_display = (
+        "user",
+        "dir_name",
+        "scan_time",
+        "dir_mtime",
+        "size_bytes",
+        "scan_id",
+    )
+    search_fields = ("user",)
+    fields = ("user", "dir_name", "scan_time", "dir_mtime", "size_bytes", "scan_id")
+    readonly_fields = (
+        "user",
+        "dir_name",
+        "scan_time",
+        "dir_mtime",
+        "size_bytes",
+        "scan_id",
+    )
 
-class ScheduledDeletionAdmin(admin.ModelAdmin):
-    save_on_top = True
-    list_display = ('user', 'time_entered', 'time_delete')
-    search_fields = ('user',)
-    fields = ('user', 'time_entered', 'time_delete')
-    readonly_fields = ('user', 'time_entered')
-admin.site.register(ScheduledDeletion, ScheduledDeletionAdmin)
+
+admin.site.register(CachedDirectoryScan, CachedDirectoryScanAdmin)

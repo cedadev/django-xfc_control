@@ -1,45 +1,110 @@
-"""Read in the config file for, convert from JSON to a dictionary and return
-the config xfc."""
+"""Read in the config file from the settings import, to a dictionary and return
+the config."""
 
 import json
 import logging
+import os
+from xfc_site import settings
 
-def config_path():
-    """Return the path of the config file"""
-    path = "/etc/xfc_control/xfc_config.json"
-    return path
+RABBIT_USER = "user"
+RABBIT_PASSWORD = "password"
+RABBIT_SERVER = "server"
+RABBIT_VHOST = "vhost"
+RABBIT_QUEUES = "queues"
+RABBIT_QUEUE_NAME = "name"
+RABBIT_QUEUE_TYPE = "type"
+RABBIT_EXCHANGE_TYPE = "exchange_type"
+RABBIT_EXCHANGE_NAME = "exchange"
+RABBIT_RK = "routing_key"
+RABBIT_HEARTBEAT = "hearbeat"
+RABBIT_TIMEOUT = "timeout"
 
-def read_process_config(process):
-    """Read in the config file and return the dictionary for the process."""
-    cfg_path = config_path()
-    fh = open(cfg_path)
-    cfg = json.load(fh)
-    fh.close()
-    try:
-        return cfg["processes"][process]
-    except Exception as e:
-        raise Exception("Process {} not found in config file {}".format(
-            process,
-            cfg_path)
-        )
+LOG_FILENAME = "log_file"
+LOG_LEVEL = "log_level"
+LOG_ENABLE = "enable"
+LOGGING = "logging"
+
+
+def load_config() -> dict:
+    # Add defaults if not in json_config
+    if RABBIT_HEARTBEAT not in settings.RABBIT_MQ:
+        settings.RABBIT_MQ[RABBIT_HEARTBEAT] = 2
+    if RABBIT_TIMEOUT not in settings.RABBIT_MQ:
+        settings.RABBIT_MQ[RABBIT_TIMEOUT] = 30
+    return settings
+
+
+def get_queue_config(queue_name: str):
+    # get the config for a particular queue with the name in queue_name
+    all_queues = settings.RABBIT_MQ[RABBIT_QUEUES]
+    for q in all_queues:
+        if q[RABBIT_QUEUE_NAME] == queue_name:
+            return q
+    return None
+
+
+def get_logging_config(process_name: str):
+    process_config = settings.XFC_LOGGING[process_name]
+    return process_config
+
+
+def get_process_name(process_name: str):
+    """Get the process name either from __file__ (first case) or __name__ (second case)"""
+    if ".py" in process_name:
+        return process_name.split("/")[-1][:-3]
+    else:
+        return process_name.split(".")[-1]
+
 
 def get_logging_level(loglevel):
     """Convert a logging level string into a logging.LOG_LEVEL"""
-    if loglevel == "DEBUG":
+    if loglevel == "debug":
         return logging.DEBUG
-    elif loglevel == "INFO":
+    elif loglevel == "info":
         return logging.INFO
-    elif loglevel == "WARNING":
+    elif loglevel == "warning":
         return logging.WARNING
-    elif loglevel == "ERROR":
+    elif loglevel == "error":
         return logging.ERROR
-    elif loglevel == "CRITICAL":
+    elif loglevel == "critical":
         return logging.CRITICAL
+
 
 def get_logging_format():
     """return the format string for the logger"""
     formt = "[%(asctime)s] %(levelname)s:%(message)s"
     return formt
+
+
+def setup_logging(process_name: str):
+    """Generic logging setup to output to a file and the stdout."""
+    # get the logging config
+    log_cfg = get_logging_config(
+        get_process_name(process_name),
+    )
+    # only continue if the logging is enabled
+    if log_cfg[LOG_ENABLE]:
+        level_str = log_cfg[LOG_LEVEL]
+        filename = log_cfg[LOG_FILENAME]
+        # get the logger that matches the calling process name
+        logger = logging.getLogger(process_name)
+        level = get_logging_level(level_str)
+        logger.setLevel(level)
+        # create a file handler for this logger and set the level from the config
+        fh = logging.FileHandler(filename=filename)
+        fh.setLevel(level)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+
+        ah = logging.StreamHandler()
+        ah.setLevel(level)
+        ah.setFormatter(formatter)
+        logger.addHandler(ah)
+    return logger
+
 
 def split_args(args):
     # split args that are in the form somekey=somevalue into a dictionary
