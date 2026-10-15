@@ -23,7 +23,9 @@ import subprocess
 import json
 from django.conf import settings
 
+import signal
 from concurrent.futures import ThreadPoolExecutor
+from pika.exceptions import StreamLostError, AMQPConnectionError
 
 import xfc_control.scripts.config as CFG
 from xfc_control.scripts.RabbitMQPublisher import RabbitMQPublisher
@@ -338,21 +340,26 @@ def run(*args):
     global logger
     logger.info("Starting scan from Django runscript")
 
-    try:
-        # For the rabbit implementation we have to create a consumer for the
-        # xfc_consume_queue
-        CONSUME_QUEUE_NAME = "xfc_publish_scan"
-        consumer = RabbitMQConsumer(queue_name=CONSUME_QUEUE_NAME)
-        consumer.attach_logger(logger)
-        consumer.connect()
-        consumer.start_consuming(rabbit_callbackfn)
-
-    except KeyboardInterrupt:
-        logger.info("Interrupted")
+    # For the rabbit implementation we have to create a consumer for the
+    # xfc_consume_queue
+    CONSUME_QUEUE_NAME = "xfc_publish_scan"
+    consumer = RabbitMQConsumer(queue_name=CONSUME_QUEUE_NAME)
+    consumer.attach_logger(logger)
+    loop = True
+    while loop:
         try:
-            sys.exit(0)
-        except SystemExit:
-            os._exit(0)
+            consumer.connect()
+            consumer.start_consuming(rabbit_callbackfn)
+        except KeyboardInterrupt:
+            logger.info("Interrupted")
+            loop = False
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
+        except (StreamLostError, AMQPConnectionError) as e:
+            # Log problem
+            logger.error("Connection lost, reconnecting", exc_info=e)
 
 
 # CLI

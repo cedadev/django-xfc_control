@@ -12,6 +12,7 @@ import json
 import logging
 from datetime import datetime
 from django.core.mail import send_mail
+from pika.exceptions import StreamLostError, AMQPConnectionError
 from xfc_control.scripts.RabbitMQConsumer import RabbitMQConsumer
 import xfc_control.scripts.config as CFG
 from xfc_control.scripts.xfc_scan import format_size
@@ -36,13 +37,28 @@ def main() -> None:
 
     CONSUME_QUEUE_NAME = "xfc_consume_scan"
     consumer = RabbitMQConsumer(queue_name=CONSUME_QUEUE_NAME)
+
     consumer.setup_logging(process_name=__name__)
-    consumer.connect()
-    # make the logger available globally
     logger = consumer.logger
-    consumer.logger.debug(f"Starting process: {__name__}")
-    consumer.logger.info(" [*] Waiting for messages. CTRL+C to exit")
-    consumer.start_consuming(callbackfn)
+
+    loop = True
+    while loop:
+        try:
+            consumer.connect()
+            consumer.start_consuming(callbackfn)
+            consumer.logger.debug(f"Starting process: {__name__}")
+            consumer.logger.info(" [*] Waiting for messages. CTRL+C to exit")
+
+        except KeyboardInterrupt:
+            logger.info("Interrupted")
+            loop = False
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
+        except (StreamLostError, AMQPConnectionError) as e:
+            # Log problem
+            logger.error("Connection lost, reconnecting", exc_info=e)
 
 
 def process_scan_output(result: dict) -> None:
