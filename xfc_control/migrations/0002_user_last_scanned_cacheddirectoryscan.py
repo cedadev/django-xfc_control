@@ -14,14 +14,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="user",
-            name="last_scanned",
-            field=models.DateTimeField(
-                default=datetime.datetime(1900, 1, 1, 0, 0),
-                help_text="The last time the user's work directory was scanned",
-            ),
-        ),
+        # migrations.AddField(
+        #     model_name="user",
+        #     name="last_scanned",
+        #     field=models.DateTimeField(
+        #         default=datetime.datetime(1900, 1, 1, 0, 0),
+        #         help_text="The last time the user's work directory was scanned",
+        #     ),
+        # ),
         migrations.CreateModel(
             name="CachedDirectoryScan",
             fields=[
