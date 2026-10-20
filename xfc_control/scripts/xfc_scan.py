@@ -149,7 +149,7 @@ def determine_best_method(path: str, method: str) -> tuple[str, str]:
                     [command, flag, path], capture_output=True, text=True, check=True
                 )
                 if method != command:
-                    logger.error(f"{method} failed, using {command} instead")
+                    logger.error(f"{method} failed, using {command} {flag} instead")
                 return command, flag
             except Exception:
                 pass
@@ -323,7 +323,7 @@ def rabbit_callbackfn(
     # scan types are: "user_scan" OR "volume_scan"
     scan_type = body_json["type"]
     base_dir = body_json["work_dir"]
-    process_name = CFG.get_process_name(__name__)
+    _ = CFG.get_process_name(__name__)
     scan_method = settings.SCAN_METHOD  # put this in config
     results, _ = scan_all_dirs_from_base(base_dir, scan_type, scan_method, human=False)
     # publish the results to the processing queue
