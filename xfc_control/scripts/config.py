@@ -16,7 +16,7 @@ RABBIT_QUEUE_TYPE = "type"
 RABBIT_EXCHANGE_TYPE = "exchange_type"
 RABBIT_EXCHANGE_NAME = "exchange"
 RABBIT_RK = "routing_key"
-RABBIT_HEARTBEAT = "hearbeat"
+RABBIT_HEARTBEAT = "heartbeat"
 RABBIT_TIMEOUT = "timeout"
 
 LOG_FILENAME = "log_file"
