@@ -210,6 +210,7 @@ def update_user_quota(user: User) -> None:
 
     user.total_used = total_size
     user.quota_used = temporal_size
+    user.last_scanned = scans[scans.count() - 1].scan_time
     user.save()
 
     # check whether the user quotas have been reached and whether an email should be
@@ -240,8 +241,12 @@ def update_cache_disk_quota(cache_disk: CacheDisk) -> None:
         scan = (
             CachedDirectoryScan.objects.filter(user=user).order_by("scan_time").last()
         )
-        log_str += f"\n  Adding used_bytes by: {user.name}, total_used: {scan.formatted_size()}"
-        sum += scan.size_bytes
+        if scan:
+            log_str += (
+                f"\n  Adding used_bytes by: {user.name}, total_used: "
+                f"{scan.formatted_size()}"
+            )
+            sum += scan.size_bytes
     # set to the sum
     cache_disk.used_bytes = sum
     log_str += (
