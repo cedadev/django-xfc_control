@@ -57,6 +57,9 @@ class RabbitMQPublisher:
             )
 
         self.channel = connection.channel()
+        self.channel.basic_qos(prefetch_count=1)
+        self.channel.confirm_delivery()
+
         self.declare_queue()
         self.declare_bindings()
 
