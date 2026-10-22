@@ -197,8 +197,12 @@ def update_user_quota(user: User) -> None:
     global logger
 
     scans = CachedDirectoryScan.objects.filter(user=user).order_by("scan_time")
-    total_size = scans[scans.count() - 1].size_bytes
-    temporal_size = calculate_temporal_usage_3(scans=scans)
+    if scans.count() > 0:
+        total_size = scans[scans.count() - 1].size_bytes
+        temporal_size = calculate_temporal_usage_3(scans=scans)
+    else:
+        total_size = 0
+        temporal_size = 0
 
     # round to int
     temporal_size = int(temporal_size)
