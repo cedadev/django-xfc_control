@@ -16,7 +16,7 @@ class RabbitMQConsumer(RabbitMQPublisher):
                 queue=self.queue_name,
                 on_message_callback=callback,
                 auto_ack=False,
-                exclusive=True,
+                exclusive=False,
             )
             self.channel.start_consuming()
         except Exception as e:
