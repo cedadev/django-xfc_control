@@ -85,20 +85,26 @@ def setup_logging(process_name: str):
     # only continue if the logging is enabled
     if log_cfg[LOG_ENABLE]:
         level_str = log_cfg[LOG_LEVEL]
-        filename = log_cfg[LOG_FILENAME]
+        if log_cfg[LOG_FILENAME]:
+            filename = log_cfg[LOG_FILENAME]
+        else:
+            filename = None
+        # Format with time, process name level, message
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         # get the logger that matches the calling process name
         logger = logging.getLogger(process_name)
         level = get_logging_level(level_str)
         logger.setLevel(level)
         # create a file handler for this logger and set the level from the config
-        fh = logging.FileHandler(filename=filename)
-        fh.setLevel(level)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+        if filename:
+            fh = logging.FileHandler(filename=filename)
+            fh.setLevel(level)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
 
+        # stdout handler - is written to
         ah = logging.StreamHandler()
         ah.setLevel(level)
         ah.setFormatter(formatter)

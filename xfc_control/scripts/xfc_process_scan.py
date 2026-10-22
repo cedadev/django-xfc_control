@@ -234,6 +234,7 @@ def update_cache_disk_quota(cache_disk: CacheDisk) -> None:
     global logger
     users = User.objects.filter(cache_disk=cache_disk)
     sum = 0.0
+    alloc = 0.0
 
     log_str = f"\nUpdating CacheDisk: {cache_disk.mountpoint}"
     for user in users:
@@ -247,12 +248,17 @@ def update_cache_disk_quota(cache_disk: CacheDisk) -> None:
                 f"{scan.formatted_size()}"
             )
             sum += scan.size_bytes
+        alloc += user.hard_limit_size
     # set to the sum
     cache_disk.used_bytes = sum
     log_str += (
         f"\n  Total used: {cache_disk.formatted_used()} / {cache_disk.formatted_size()}"
+        f"\n  Total allocated: {cache_disk.formatted_allocated()}"
     )
     logger.info(log_str)
+    # set allocated
+    cache_disk.allocated_bytes = alloc
+    cache_disk.save()
 
 
 def update_all_cache_disk_quota() -> None:
