@@ -38,12 +38,13 @@ def send_notification_email(user, notify):
     else:
         subject += " OFF"
 
-    msg = "This email confirms that JASMIN user: " + str(user.name) + " will "
+    msg = f"This email confirms that JASMIN user: {str(user.name)} will "
     if not notify:
         msg += "no longer "
     msg += (
-        "be notified when "
-        + "files are scheduled for deletion from the JASMIN transfer cache (XFC)."
+        "be notified when files on the JASMIN transfer cache (XFC) exceed the quota "
+        f"of: {user.formatted_size()} and the hard limit of: "
+        f"{user.formatted_hard_limit()}."
     )
 
     send_mail(subject, msg, fromaddr, toaddrs, fail_silently=False)
@@ -147,7 +148,8 @@ class UserView(View):
              ..
 
              :<jsonarr string name: the username (same as JASMIN username)
-             :<jsonarr string email: (*optional*) email address of the user for deletion notifications
+             :<jsonarr string email: (*optional*) email address of the user for quota
+             violation notifications
 
              :>jsonarr string name: the username
              :>jsonarr string email: the user's email address
@@ -155,7 +157,8 @@ class UserView(View):
              :>jsonarr int quota_size: quota size allocated to user (in bytes)
 
              :statuscode 200: request completed successfully
-             :statuscode 403: error with user quota: no CacheDisk could be found with enough space on it to hold the user's quota
+             :statuscode 403: error with user quota: no CacheDisk could be found with
+             enough space on it to hold the user's quota
              :statuscode 403: Transfer cache already initialized for this user
              :statuscode 404: name not supplied in POST request
 
@@ -300,8 +303,10 @@ class UserView(View):
 
             :queryparam string name: The username (same as JASMIN username).
 
-            :<jsonarr string email: (*optional*) email address of the user for deletion notifications
-            :<jsonarr boolean notify: (*optional*) whether to email the user about scheduled deletions
+            :<jsonarr string email: (*optional*) email address of the user for quota
+            violations
+            :<jsonarr boolean notify: (*optional*) whether to email the user about quota
+            violations
 
             :>jsonarr string name: the username
             :>jsonarr string email: the user's email address
@@ -538,7 +543,8 @@ class PredictView(View):
 
                 ..
 
-                    - **name** (`string`): the name of the user who owns this scheduled deletion
+                    - **name** (`string`): the name of the user to run the prediction
+                    for
                     - **time_predict** (`string`): the date when the quota will be exceeded, in isoformat
                     - **over_quota** (`int`): the amount that the user will exceed the quota by
                     - **cache_disk** (`string`): mountpoint of the cache disk where the files are kept
