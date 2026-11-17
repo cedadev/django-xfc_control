@@ -22,7 +22,7 @@ setup(
         "packaging",
         "pyparsing",
         "pytz",
-        "pyasn1==0.6.4",
+        "pyasn1==0.6.5",
         "six",
         "jasmin-ldap @ git+https://github.com/cedadev/jasmin-ldap.git@v1.0.3#egg=jasmin-ldap",
         "click",
