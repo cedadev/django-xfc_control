@@ -151,7 +151,7 @@ def determine_best_method(path: str, method: str) -> tuple[str, str]:
                 if method != command:
                     logger.error(f"{method} failed, using {command} {flag} instead")
                 return command, flag
-            except Exception:
+            except FileNotFoundError:
                 pass
         logger.error(f"{method} failed, falling back to default")
 
@@ -261,7 +261,9 @@ def scan_all_dirs_from_base(
     logger.info(f"Scanning from base directory: {base_path}")
 
     # Get the best method, i.e. fastest supported
-    method, params = determine_best_method(base_path, method)
+    # test path to somewhere on the system, rather than scanning the directory twice!
+    test_path = os.path.expanduser("~/")
+    method, params = determine_best_method(test_path, method)
 
     # get the current time for scanning
     time_now = datetime.now()
@@ -271,7 +273,7 @@ def scan_all_dirs_from_base(
 
     # Build a list of directories to scan from the base path.
     # These are the user's top-level directories in the XFC database.
-    # We only need to do this for volume scans
+    # We only need to do this for volume scansx
     if scan_type == "volume_scan":
         with os.scandir(base_path) as entries:
             for entry in entries:
@@ -320,6 +322,9 @@ def rabbit_callbackfn(
         username = body_json["username"]
     else:
         username = ""
+
+    # acknowledge early
+    channel.basic_ack(delivery_tag=method.delivery_tag)
     # scan types are: "user_scan" OR "volume_scan"
     scan_type = body_json["type"]
     base_dir = body_json["work_dir"]
@@ -328,8 +333,6 @@ def rabbit_callbackfn(
     results, _ = scan_all_dirs_from_base(base_dir, scan_type, scan_method, human=False)
     # publish the results to the processing queue
     publish_results(username, results)
-
-    channel.basic_ack(delivery_tag=method.delivery_tag)
 
 
 def run(*args):
