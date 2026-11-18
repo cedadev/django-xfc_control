@@ -79,7 +79,7 @@ class CachedDirectoryScanAdmin(admin.ModelAdmin):
         "size_bytes",
         "scan_id",
     )
-    search_fields = ("user",)
+    search_fields = ("user__name",)
     fields = ("user", "dir_name", "scan_time", "dir_mtime", "size_bytes", "scan_id")
     readonly_fields = (
         "user",
@@ -89,6 +89,7 @@ class CachedDirectoryScanAdmin(admin.ModelAdmin):
         "size_bytes",
         "scan_id",
     )
+    list_per_page = 500
 
 
 admin.site.register(CachedDirectoryScan, CachedDirectoryScanAdmin)

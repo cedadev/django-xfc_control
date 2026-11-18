@@ -2,7 +2,7 @@
 
  This script is designed to be run via the django-extensions runscript command:
 
-  ``python manage.py runscript xfc_scan``
+  ``python manage.py runscript xfc_fix_quotas``
 
 Author: Neil Massey
 """
