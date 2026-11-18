@@ -12,7 +12,6 @@ from xfc_control.scripts.xfc_process_scan import (
     update_user_quota,
     update_cache_disk_quota,
 )
-import os
 
 
 def fix_user_quotas():

@@ -210,7 +210,10 @@ def update_user_quota(user: User) -> None:
     log_str = f"\n  Updating quota for user {user.name}: "
     log_str += f"\n  Total size      : {format_size(total_size)}"
     log_str += f"\n  Temporal size   : {format_size(temporal_size)}"
-    logger.info(log_str)
+    if logger:
+        logger.info(log_str)
+    else:
+        print(log_str)
 
     user.total_used = total_size
     user.quota_used = temporal_size
@@ -260,7 +263,10 @@ def update_cache_disk_quota(cache_disk: CacheDisk) -> None:
         f"\n  Total used: {cache_disk.formatted_used()} / {cache_disk.formatted_size()}"
         f"\n  Total allocated: {cache_disk.formatted_allocated()}"
     )
-    logger.info(log_str)
+    if logger:
+        logger.info(log_str)
+    else:
+        print(log_str)
     # set allocated
     cache_disk.allocated_bytes = alloc
     cache_disk.save()
