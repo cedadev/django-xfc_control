@@ -145,13 +145,16 @@ def determine_best_method(path: str, method: str) -> tuple[str, str]:
         # fall through will be default - python only method
         for command, flag in checks:
             try:
+                full_command = " ".join([command, flag, path])
                 subprocess.run(
                     [command, flag, path], capture_output=True, text=True, check=True
                 )
                 if method != command:
-                    logger.error(f"{method} failed, using {command} {flag} instead")
+                    logger.error(
+                        f"{full_command} failed, using {command} {flag} instead"
+                    )
                 return command, flag
-            except FileNotFoundError:
+            except (RuntimeError, FileNotFoundError, ChildProcessError):
                 pass
         logger.error(f"{method} failed, falling back to default")
 
@@ -174,6 +177,10 @@ def shell_method_scan_all(
     )
 
     cmd = [method, params] + paths
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (FileNotFoundError, RuntimeError, ChildProcessError):
+        return []
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     results = []
     size_map = {}
