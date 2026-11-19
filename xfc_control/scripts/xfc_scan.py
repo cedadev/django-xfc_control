@@ -23,7 +23,6 @@ import subprocess
 import json
 from django.conf import settings
 
-import signal
 from concurrent.futures import ThreadPoolExecutor
 from pika.exceptions import StreamLostError, AMQPConnectionError
 
